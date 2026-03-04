@@ -508,8 +508,8 @@ void LaserMapping::ObsModel(NavState &s, ESKF::CustomObservationModel &obs) {
 
     Timer::Evaluate(
         [&, this]() {
-            auto R_wl = (s.rot_ * s.offset_R_lidar_).cast<float>();
-            auto t_wl = (s.rot_ * s.offset_t_lidar_ + s.pos_).cast<float>();
+            Mat3f R_wl = (s.rot_ * s.offset_R_lidar_).matrix().cast<float>();
+            Vec3f t_wl = (s.rot_ * s.offset_t_lidar_ + s.pos_).cast<float>();
 
             std::for_each(std::execution::par_unseq, index.begin(), index.end(), [&](const size_t &i) {
                 PointType &point_body = scan_down_body_->points[i];

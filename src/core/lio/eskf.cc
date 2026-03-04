@@ -299,7 +299,7 @@ void ESKF::Update(ESKF::ObsType obs, const double& R) {
                     L_.block<3, 1>(idx, j) = res_temp_SO3 * (P_.block<3, 1>(idx, j));
                 }
 
-                for (int j = 0; j < 15; j++) {
+                for (int j = 0; j < 12; j++) {
                     K_H.block<3, 1>(idx, j) = res_temp_SO3 * (K_H.block<3, 1>(idx, j));
                 }
 
@@ -326,7 +326,7 @@ void ESKF::Update(ESKF::ObsType obs, const double& R) {
                     L_.block<2, 1>(idx, j) = res_temp_S2 * (P_.block<2, 1>(idx, j));
                 }
 
-                for (auto j = 0; j < 15; j++) {
+                for (auto j = 0; j < 12; j++) {
                     K_H.block<2, 1>(idx, j) = res_temp_S2 * (K_H.block<2, 1>(idx, j));
                 }
 
@@ -336,7 +336,7 @@ void ESKF::Update(ESKF::ObsType obs, const double& R) {
                 }
             }
 
-            P_ = L_ - K_H.block<23, 15>(0, 0) * P_.template block<15, 23>(0, 0);
+            P_ = L_ - K_H.block<23, 12>(0, 0) * P_.template block<12, 23>(0, 0);
 
             break;
         }
