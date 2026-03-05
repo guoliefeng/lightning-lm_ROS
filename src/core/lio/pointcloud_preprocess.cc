@@ -1,6 +1,9 @@
 #include "pointcloud_preprocess.h"
 #include <execution>
 
+#include <algorithm>
+#include <cmath>
+
 #include <glog/logging.h>
 
 namespace lightning {
@@ -19,6 +22,10 @@ void PointCloudPreprocess::Process(const sensor_msgs::PointCloud2 ::ConstPtr &ms
 
         case LidarType::VELO32:
             VelodyneHandler(msg);
+            break;
+
+        case LidarType::MERGED:
+            MergedCloudHandler(msg);
             break;
 
         default:
@@ -189,6 +196,73 @@ void PointCloudPreprocess::VelodyneHandler(const sensor_msgs::PointCloud2::Const
                 cloud_out_.points.push_back(added_pt);
             }
         }
+    }
+
+    cloud_out_.width = cloud_out_.size();
+    cloud_out_.height = 1;
+    cloud_out_.is_dense = false;
+}
+
+void PointCloudPreprocess::MergedCloudHandler(const sensor_msgs::PointCloud2::ConstPtr &msg) {
+    cloud_out_.clear();
+    cloud_full_.clear();
+
+    pcl::PointCloud<merged_cloud_ros::Point> pl_orig;
+    pcl::fromROSMsg(*msg, pl_orig);
+    const int plsize = static_cast<int>(pl_orig.points.size());
+    if (plsize <= 0) {
+        LOG_EVERY_N(WARNING, 100) << "merged cloud has no points";
+        return;
+    }
+
+    cloud_out_.reserve(plsize);
+    const int filter_step = std::max(1, point_filter_num_);
+
+    std::uint16_t max_azimuth = 0;
+    for (const auto &pt : pl_orig.points) {
+        max_azimuth = std::max(max_azimuth, pt.azimuth);
+    }
+
+    for (int i = 0; i < plsize; ++i) {
+        if (i % filter_step != 0) {
+            continue;
+        }
+
+        const auto &src = pl_orig.points[i];
+        PointType added_pt;
+        added_pt.x = src.x;
+        added_pt.y = src.y;
+        added_pt.z = src.z;
+        added_pt.intensity = src.intensity;
+
+        if (!std::isfinite(added_pt.x) || !std::isfinite(added_pt.y) || !std::isfinite(added_pt.z)) {
+            continue;
+        }
+
+        const double range_sq = static_cast<double>(added_pt.x) * static_cast<double>(added_pt.x) +
+                                static_cast<double>(added_pt.y) * static_cast<double>(added_pt.y) +
+                                static_cast<double>(added_pt.z) * static_cast<double>(added_pt.z);
+        if (range_sq <= blind_ * blind_) {
+            continue;
+        }
+
+        if (max_azimuth > 0) {
+            added_pt.time = (static_cast<double>(src.azimuth) / static_cast<double>(max_azimuth)) *
+                            static_cast<double>(merged_scan_period_ms_);
+        } else if (plsize > 1) {
+            added_pt.time = (static_cast<double>(i) / static_cast<double>(plsize - 1)) *
+                            static_cast<double>(merged_scan_period_ms_);
+        } else {
+            added_pt.time = 0.0;
+        }
+
+        cloud_out_.points.push_back(added_pt);
+    }
+
+    if (cloud_out_.size() > 1) {
+        std::sort(cloud_out_.points.begin(), cloud_out_.points.end(), [](const PointType &a, const PointType &b) {
+            return a.time < b.time;
+        });
     }
 
     cloud_out_.width = cloud_out_.size();

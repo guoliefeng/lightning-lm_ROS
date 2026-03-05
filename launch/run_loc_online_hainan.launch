@@ -1,0 +1,9 @@
+
+<launch>
+
+    <arg name="config_file" default="$(find lightning)/config/hainan.yaml"/>
+
+    <node pkg="lightning" type="run_loc_online" name="run_loc_online" output="screen"
+        args="--config $(arg config_file)"/>
+
+</launch>

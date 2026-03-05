@@ -81,6 +81,9 @@ bool LaserMapping::LoadParamsFromYAML(const std::string &yaml_file) {
     } else if (lidar_type == 3) {
         preprocess_->SetLidarType(LidarType::OUST64);
         LOG(INFO) << "Using OUST 64 Lidar";
+    } else if (lidar_type == 6) {
+        preprocess_->SetLidarType(LidarType::MERGED);
+        LOG(INFO) << "Using merged PointCloud2 (meta_cloud)";
     } else {
         LOG(WARNING) << "unknown lidar_type";
         return false;

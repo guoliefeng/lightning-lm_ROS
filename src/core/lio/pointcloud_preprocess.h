@@ -12,7 +12,7 @@
 
 namespace lightning {
 
-enum class LidarType { AVIA = 1, VELO32, OUST64 };
+enum class LidarType { AVIA = 1, VELO32, OUST64, MERGED = 6 };
 
 /**
  * point cloud preprocess
@@ -46,6 +46,7 @@ class PointCloudPreprocess {
    private:
     void Oust64Handler(const sensor_msgs::PointCloud2 ::ConstPtr &msg);
     void VelodyneHandler(const sensor_msgs::PointCloud2 ::ConstPtr &msg);
+    void MergedCloudHandler(const sensor_msgs::PointCloud2 ::ConstPtr &msg);
 
     PointCloudType cloud_full_, cloud_out_;
 
@@ -54,6 +55,7 @@ class PointCloudPreprocess {
     int num_scans_ = 6;
     double blind_ = 0.01;
     float time_scale_ = 1e-3;
+    float merged_scan_period_ms_ = 100.0f;  // merged cloud default scan period is 0.1s
     bool given_offset_time_ = false;
 };
 }  // namespace lightning

@@ -71,6 +71,30 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(ouster_ros::Point,
 )
 // clang-format on
 
+namespace merged_cloud_ros {
+struct EIGEN_ALIGN16 Point {
+    PCL_ADD_POINT4D
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    float intensity;
+    std::uint16_t ring;
+    std::uint16_t azimuth;
+    std::uint16_t feature;
+};
+}  // namespace merged_cloud_ros
+
+// clang-format off
+POINT_CLOUD_REGISTER_POINT_STRUCT(merged_cloud_ros::Point,
+                                  (float, x, x)
+                                      (float, y, y)
+                                      (float, z, z)
+                                      (float, intensity, intensity)
+                                      (std::uint16_t, ring, ring)
+                                      (std::uint16_t, azimuth, azimuth)
+                                      (std::uint16_t, feature, feature)
+)
+// clang-format on
+
 namespace lightning {
 
 /// 各类点云的缩写
