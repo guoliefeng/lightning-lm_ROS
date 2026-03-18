@@ -1,9 +1,10 @@
 #include <pcl/common/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
 
-#include "core/localization/lidar_loc/lidar_loc.h"
+#include "adapters/laser_mapping_adapter.h"
+#include "adapters/lidar_loc_adapter.h"
+#include "adapters/pgo_adapter.h"
 #include "core/localization/localization.h"
-#include "core/localization/pose_graph/pgo.h"
 #include "io/yaml_io.h"
 #include "ui/pangolin_window.h"
 
@@ -15,7 +16,7 @@ Localization::Localization(Options options) { options_ = options; }
 // ！初始化函数
 bool Localization::Init(const std::string& yaml_path, const std::string& global_map_path) {
     UL lock(global_mutex_);
-    if (lidar_loc_ != nullptr) {
+    if (localizer_ != nullptr) {
         // 若已经启动，则变为初始化
         Finish();
     }
@@ -27,11 +28,12 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
     LaserMapping::Options opt_lio;
     opt_lio.is_in_slam_mode_ = false;
 
-    lio_ = std::make_shared<LaserMapping>(opt_lio);
-    if (!lio_->Init(yaml_path)) {
+    motion_estimator_ = std::make_shared<LaserMappingAdapter>(opt_lio);
+    if (!motion_estimator_->Init(yaml_path)) {
         LOG(ERROR) << "failed to init lio";
         return false;
     }
+    last_keyframe_ = nullptr;
 
     /// 激光定位
     LidarLoc::Options lidar_loc_options;
@@ -39,20 +41,25 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
     lidar_loc_options.force_2d_ = yaml.GetValue<bool>("lidar_loc", "force_2d");
     lidar_loc_options.map_option_.enable_dynamic_polygon_ = false;
     lidar_loc_options.map_option_.map_path_ = global_map_path;
-    lidar_loc_ = std::make_shared<LidarLoc>(lidar_loc_options);
+    localizer_ = std::make_shared<LidarLocAdapter>(lidar_loc_options);
 
     if (options_.with_ui_) {
         ui_ = std::make_shared<ui::PangolinWindow>();
         ui_->SetCurrentScanSize(10);
         ui_->Init();
-        lidar_loc_->SetUI(ui_);
+
+        auto lidar_loc_adapter = std::dynamic_pointer_cast<LidarLocAdapter>(localizer_);
+        if (lidar_loc_adapter) {
+            lidar_loc_adapter->SetUI(ui_);
+        }
     }
 
-    lidar_loc_->Init(yaml_path);
+    localizer_->Init(yaml_path);
 
     /// pose graph
-    pgo_ = std::make_shared<PGO>();
-    pgo_->SetDebug(false);
+    auto pgo_adapter = std::make_shared<PGOAdapter>();
+    pgo_adapter->SetDebug(false);
+    fusion_engine_ = pgo_adapter;
 
     ///  各模块的异步调用
     options_.enable_lidar_loc_skip_ = yaml.GetValue<bool>("system", "enable_lidar_loc_skip");
@@ -80,7 +87,7 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
     }
 
     /// TODO: 发布
-    pgo_->SetHighFrequencyGlobalOutputHandleFunction([this](const LocalizationResult& res) {
+    fusion_engine_->SetHighFrequencyOutputCallback([this](const LocalizationResult& res) {
         if (loc_result_.timestamp_ > 0) {
             double loc_fps = 1.0 / (res.timestamp_ - loc_result_.timestamp_);
             LOG_EVERY_N(INFO, 10) << "loc fps: " << loc_fps;
@@ -128,7 +135,7 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
 
 void Localization::ProcessLidarMsg(const sensor_msgs::PointCloud2::ConstPtr cloud) {
     UL lock(global_mutex_);
-    if (lidar_loc_ == nullptr || lio_ == nullptr || pgo_ == nullptr) {
+    if (localizer_ == nullptr || motion_estimator_ == nullptr || fusion_engine_ == nullptr) {
         return;
     }
 
@@ -146,7 +153,7 @@ void Localization::ProcessLidarMsg(const sensor_msgs::PointCloud2::ConstPtr clou
 
 void Localization::ProcessLivoxLidarMsg(const livox_ros_driver::CustomMsg::ConstPtr cloud) {
     UL lock(global_mutex_);
-    if (lidar_loc_ == nullptr || lio_ == nullptr || pgo_ == nullptr) {
+    if (localizer_ == nullptr || motion_estimator_ == nullptr || fusion_engine_ == nullptr) {
         return;
     }
 
@@ -163,28 +170,28 @@ void Localization::ProcessLivoxLidarMsg(const livox_ros_driver::CustomMsg::Const
 }
 
 void Localization::LidarOdomProcCloud(CloudPtr cloud) {
-    if (lio_ == nullptr) {
+    if (motion_estimator_ == nullptr) {
         return;
     }
 
     /// NOTE: 在NCLT这种数据集中，lio内部是有缓存的，它拿到的点云不一定是最新时刻的点云
-    lio_->ProcessPointCloud2(cloud);
-    if (!lio_->Run()) {
+    motion_estimator_->ProcessCloud(cloud);
+    if (!motion_estimator_->Run()) {
         return;
     }
 
-    auto lo_state = lio_->GetState();
+    auto lo_state = motion_estimator_->GetLidarOdomState();
 
-    lidar_loc_->ProcessLO(lo_state);
-    pgo_->ProcessLidarOdom(lo_state);
+    localizer_->FeedLidarOdom(lo_state);
+    fusion_engine_->FeedLidarOdom(lo_state);
 
     // LOG(INFO) << "LO pose: " << std::setprecision(12) << lo_state.timestamp_ << " "
     //           << lo_state.GetPose().translation().transpose();
 
     /// 获得lio的关键帧
-    auto kf = lio_->GetKeyframe();
+    auto kf = motion_estimator_->GetKeyframe();
 
-    if (kf == lio_kf_) {
+    if (kf == last_keyframe_) {
         /// 关键帧未更新，那就只更新IMU状态
 
         // auto dr_state = lio_->GetState();
@@ -193,9 +200,9 @@ void Localization::LidarOdomProcCloud(CloudPtr cloud) {
         return;
     }
 
-    lio_kf_ = kf;
+    last_keyframe_ = kf;
 
-    auto scan = lio_->GetScanUndist();
+    auto scan = motion_estimator_->GetUndistortedScan();
 
     if (options_.online_mode_) {
         lidar_loc_proc_cloud_.AddMessage(scan);
@@ -205,10 +212,10 @@ void Localization::LidarOdomProcCloud(CloudPtr cloud) {
 }
 
 void Localization::LidarLocProcCloud(CloudPtr scan_undist) {
-    lidar_loc_->ProcessCloud(scan_undist);
+    localizer_->ProcessKeyframeScan(scan_undist);
 
-    auto res = lidar_loc_->GetLocalizationResult();
-    pgo_->ProcessLidarLoc(res);
+    auto res = localizer_->GetLocalizationResult();
+    fusion_engine_->FeedLocalization(res);
 
     if (ui_) {
         // Twi with Til, here pose means Twl, thus Til=I
@@ -226,7 +233,7 @@ void Localization::LidarLocProcCloud(CloudPtr scan_undist) {
 void Localization::ProcessIMUMsg(IMUPtr imu) {
     UL lock(global_mutex_);
 
-    if (lidar_loc_ == nullptr || lio_ == nullptr || pgo_ == nullptr) {
+    if (localizer_ == nullptr || motion_estimator_ == nullptr || fusion_engine_ == nullptr) {
         return;
     }
 
@@ -237,10 +244,10 @@ void Localization::ProcessIMUMsg(IMUPtr imu) {
     last_imu_time_ = this_imu_time;
 
     /// 里程计处理IMU
-    lio_->ProcessIMU(imu);
+    motion_estimator_->ProcessIMU(imu);
 
     /// 这里需要 IMU predict，否则没法process DR了
-    auto dr_state = lio_->GetIMUState();
+    auto dr_state = motion_estimator_->GetDeadReckoningState();
 
     if (!dr_state.pose_is_ok_) {
         return;
@@ -261,8 +268,8 @@ void Localization::ProcessIMUMsg(IMUPtr imu) {
     //           << dr_state.GetPose().translation().transpose()
     //           << ", q=" << dr_state.GetPose().unit_quaternion().coeffs().transpose();
 
-    lidar_loc_->ProcessDR(dr_state);
-    pgo_->ProcessDR(dr_state);
+    localizer_->FeedDeadReckoning(dr_state);
+    fusion_engine_->FeedDeadReckoning(dr_state);
 }
 
 // void Localization::ProcessOdomMsg(const nav_msgs::msg::Odometry::SharedPtr odom_msg) {
@@ -298,7 +305,9 @@ void Localization::ProcessIMUMsg(IMUPtr imu) {
 // }
 
 void Localization::Finish() {
-    lidar_loc_->Finish();
+    if (localizer_) {
+        localizer_->Finish();
+    }
     if (ui_) {
         ui_->Quit();
     }
@@ -310,8 +319,8 @@ void Localization::Finish() {
 void Localization::SetExternalPose(const Eigen::Quaterniond& q, const Eigen::Vector3d& t) {
     UL lock(global_mutex_);
     /// 设置外部重定位的pose
-    if (lidar_loc_) {
-        lidar_loc_->SetInitialPose(SE3(q, t));
+    if (localizer_) {
+        localizer_->SetInitialPose(SE3(q, t));
     }
 }
 

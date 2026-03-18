@@ -6,6 +6,7 @@
 #include "core/system/loc_system.h"
 #include "core/localization/localization.h"
 #include "io/yaml_io.h"
+#include "utils/timer.h"
 #include "wrapper/ros_utils.h"
 
 namespace lightning {

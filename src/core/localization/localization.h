@@ -4,9 +4,13 @@
 #include <std_msgs/Int32.h>
 
 #include "common/imu.h"
-#include "core/lio/laser_mapping.h"
+#include "common/std_types.h"
+#include "core/lio/pointcloud_preprocess.h"
 #include "core/localization/localization_result.h"
 #include "core/system/async_message_process.h"
+#include "interfaces/fusion_engine.h"
+#include "interfaces/localizer.h"
+#include "interfaces/motion_estimator.h"
 
 /// 预声明
 namespace lightning {
@@ -15,9 +19,6 @@ class PangolinWindow;
 }
 
 namespace loc {
-
-class LidarLoc;
-class PGO;
 
 /**
  * 实时定位接口实现
@@ -96,17 +97,17 @@ class Localization {
     std::shared_ptr<PointCloudPreprocess> preprocess_ = nullptr;  // point cloud preprocess
 
     /// 前端
-    std::shared_ptr<LaserMapping> lio_ = nullptr;
-    Keyframe::Ptr lio_kf_ = nullptr;
+    std::shared_ptr<IMotionEstimator> motion_estimator_ = nullptr;
+    Keyframe::Ptr last_keyframe_ = nullptr;
 
     // ui
     std::shared_ptr<ui::PangolinWindow> ui_ = nullptr;
 
     // pose graph
-    std::shared_ptr<PGO> pgo_ = nullptr;
+    std::shared_ptr<IFusionEngine> fusion_engine_ = nullptr;
 
     // lidar localization
-    std::shared_ptr<LidarLoc> lidar_loc_;
+    std::shared_ptr<ILocalizer> localizer_;
 
     /// TODO async 处理
     sys::AsyncMessageProcess<CloudPtr> lidar_odom_proc_cloud_;  // lidar odom 处理点云
