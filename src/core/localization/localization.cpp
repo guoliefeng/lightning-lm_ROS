@@ -14,7 +14,7 @@ Localization::Localization(Options options) { options_ = options; }
 // ！初始化函数
 bool Localization::Init(const std::string& yaml_path, const std::string& global_map_path) {
     UL lock(global_mutex_);
-    if (localizer_ != nullptr) {
+    if (localizer_ != nullptr || sensor_pipeline_ != nullptr) {
         // 若已经启动，则变为初始化
         Finish();
     }
@@ -29,39 +29,49 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
     }
 
     auto components =
-        LocalizationBuilder::BuildLocalizationComponents(yaml_path, global_map_path, options_.with_ui_, ui_);
-    if (!components.motion_estimator || !components.localizer || !components.fusion_engine) {
+        LocalizationBuilder::BuildLocalizationComponents(yaml_path, global_map_path, options_.with_ui_,
+                                                         options_.online_mode_, ui_);
+    if (!components.localizer || !components.fusion_engine || !components.sensor_pipeline) {
         return false;
     }
 
-    motion_estimator_ = components.motion_estimator;
     localizer_ = components.localizer;
     fusion_engine_ = components.fusion_engine;
-    last_keyframe_ = nullptr;
+    sensor_pipeline_ = components.sensor_pipeline;
+
+    sensor_pipeline_->SetDeadReckoningCallback([this](const NavState& dr_state) {
+        localizer_->FeedDeadReckoning(dr_state);
+        fusion_engine_->FeedDeadReckoning(dr_state);
+    });
+
+    sensor_pipeline_->SetLidarOdomCallback([this](const NavState& lo_state) {
+        localizer_->FeedLidarOdom(lo_state);
+        fusion_engine_->FeedLidarOdom(lo_state);
+    });
+
+    sensor_pipeline_->SetKeyframeScanCallback([this](CloudPtr scan) {
+        if (options_.online_mode_) {
+            lidar_loc_proc_cloud_.AddMessage(scan);
+        } else {
+            LidarLocProcCloud(scan);
+        }
+    });
 
     ///  各模块的异步调用
     options_.enable_lidar_loc_skip_ = yaml.GetValue<bool>("system", "enable_lidar_loc_skip");
     options_.enable_lidar_loc_rviz_ = yaml.GetValue<bool>("system", "enable_lidar_loc_rviz");
     options_.lidar_loc_skip_num_ = yaml.GetValue<int>("system", "lidar_loc_skip_num");
-    options_.enable_lidar_odom_skip_ = yaml.GetValue<bool>("system", "enable_lidar_odom_skip");
-    options_.lidar_odom_skip_num_ = yaml.GetValue<int>("system", "lidar_odom_skip_num");
-
-    lidar_odom_proc_cloud_.SetMaxSize(1);
     lidar_loc_proc_cloud_.SetMaxSize(1);
 
-    lidar_odom_proc_cloud_.SetName("激光里程计");
     lidar_loc_proc_cloud_.SetName("激光定位");
 
     // 允许跳帧
     lidar_loc_proc_cloud_.SetSkipParam(options_.enable_lidar_loc_skip_, options_.lidar_loc_skip_num_);
-    lidar_odom_proc_cloud_.SetSkipParam(options_.enable_lidar_odom_skip_, options_.lidar_odom_skip_num_);
-
-    lidar_odom_proc_cloud_.SetProcFunc([this](CloudPtr cloud) { LidarOdomProcCloud(cloud); });
     lidar_loc_proc_cloud_.SetProcFunc([this](CloudPtr cloud) { LidarLocProcCloud(cloud); });
 
     if (options_.online_mode_) {
-        lidar_odom_proc_cloud_.Start();
         lidar_loc_proc_cloud_.Start();
+        sensor_pipeline_->Start();
     }
 
     /// TODO: 发布
@@ -82,111 +92,25 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
             ui_->UpdateRecentPose(loc_result_.pose_);
         }
     });
-
-    /// 预处理器
-    preprocess_.reset(new PointCloudPreprocess());
-    preprocess_->Blind() = yaml.GetValue<double>("fasterlio", "blind");
-    preprocess_->TimeScale() = yaml.GetValue<double>("fasterlio", "time_scale");
-    int lidar_type = yaml.GetValue<int>("fasterlio", "lidar_type");
-    preprocess_->NumScans() = yaml.GetValue<int>("fasterlio", "scan_line");
-    preprocess_->PointFilterNum() = yaml.GetValue<int>("fasterlio", "point_filter_num");
-
-    LOG(INFO) << "lidar_type " << lidar_type;
-    if (lidar_type == 1) {
-        preprocess_->SetLidarType(LidarType::AVIA);
-        LOG(INFO) << "Using AVIA Lidar";
-    } else if (lidar_type == 2) {
-        preprocess_->SetLidarType(LidarType::VELO32);
-        LOG(INFO) << "Using Velodyne 32 Lidar";
-    } else if (lidar_type == 3) {
-        preprocess_->SetLidarType(LidarType::OUST64);
-        LOG(INFO) << "Using OUST 64 Lidar";
-    } else if (lidar_type == 6) {
-        preprocess_->SetLidarType(LidarType::MERGED);
-        LOG(INFO) << "Using merged PointCloud2 (meta_cloud)";
-    } else {
-        LOG(WARNING) << "unknown lidar_type";
-    }
-
     return true;
 }
 
 void Localization::ProcessLidarMsg(const sensor_msgs::PointCloud2::ConstPtr cloud) {
     UL lock(global_mutex_);
-    if (localizer_ == nullptr || motion_estimator_ == nullptr || fusion_engine_ == nullptr) {
+    if (localizer_ == nullptr || sensor_pipeline_ == nullptr || fusion_engine_ == nullptr) {
         return;
     }
 
-    // 串行模式
-    CloudPtr laser_cloud(new PointCloudType);
-    preprocess_->Process(cloud, laser_cloud);
-    laser_cloud->header.stamp = cloud->header.stamp.sec * 1e9 + cloud->header.stamp.nsec;
-
-    if (options_.online_mode_) {
-        lidar_odom_proc_cloud_.AddMessage(laser_cloud);
-    } else {
-        LidarOdomProcCloud(laser_cloud);
-    }
+    sensor_pipeline_->ProcessPointCloud2(cloud);
 }
 
 void Localization::ProcessLivoxLidarMsg(const livox_ros_driver::CustomMsg::ConstPtr cloud) {
     UL lock(global_mutex_);
-    if (localizer_ == nullptr || motion_estimator_ == nullptr || fusion_engine_ == nullptr) {
+    if (localizer_ == nullptr || sensor_pipeline_ == nullptr || fusion_engine_ == nullptr) {
         return;
     }
 
-    // 串行模式
-    CloudPtr laser_cloud(new PointCloudType);
-    preprocess_->Process(cloud, laser_cloud);
-    laser_cloud->header.stamp = cloud->header.stamp.sec * 1e9 + cloud->header.stamp.nsec;
-
-    if (options_.online_mode_) {
-        lidar_odom_proc_cloud_.AddMessage(laser_cloud);
-    } else {
-        LidarOdomProcCloud(laser_cloud);
-    }
-}
-
-void Localization::LidarOdomProcCloud(CloudPtr cloud) {
-    if (motion_estimator_ == nullptr) {
-        return;
-    }
-
-    /// NOTE: 在NCLT这种数据集中，lio内部是有缓存的，它拿到的点云不一定是最新时刻的点云
-    motion_estimator_->ProcessCloud(cloud);
-    if (!motion_estimator_->Run()) {
-        return;
-    }
-
-    auto lo_state = motion_estimator_->GetLidarOdomState();
-
-    localizer_->FeedLidarOdom(lo_state);
-    fusion_engine_->FeedLidarOdom(lo_state);
-
-    // LOG(INFO) << "LO pose: " << std::setprecision(12) << lo_state.timestamp_ << " "
-    //           << lo_state.GetPose().translation().transpose();
-
-    /// 获得lio的关键帧
-    auto kf = motion_estimator_->GetKeyframe();
-
-    if (kf == last_keyframe_) {
-        /// 关键帧未更新，那就只更新IMU状态
-
-        // auto dr_state = lio_->GetState();
-        // lidar_loc_->ProcessDR(dr_state);
-        // pgo_->ProcessDR(dr_state);
-        return;
-    }
-
-    last_keyframe_ = kf;
-
-    auto scan = motion_estimator_->GetUndistortedScan();
-
-    if (options_.online_mode_) {
-        lidar_loc_proc_cloud_.AddMessage(scan);
-    } else {
-        LidarLocProcCloud(scan);
-    }
+    sensor_pipeline_->ProcessLivoxCloud(cloud);
 }
 
 void Localization::LidarLocProcCloud(CloudPtr scan_undist) {
@@ -211,7 +135,7 @@ void Localization::LidarLocProcCloud(CloudPtr scan_undist) {
 void Localization::ProcessIMUMsg(IMUPtr imu) {
     UL lock(global_mutex_);
 
-    if (localizer_ == nullptr || motion_estimator_ == nullptr || fusion_engine_ == nullptr) {
+    if (localizer_ == nullptr || sensor_pipeline_ == nullptr || fusion_engine_ == nullptr) {
         return;
     }
 
@@ -221,33 +145,7 @@ void Localization::ProcessIMUMsg(IMUPtr imu) {
     }
     last_imu_time_ = this_imu_time;
 
-    /// 里程计处理IMU
-    motion_estimator_->ProcessIMU(imu);
-
-    /// 这里需要 IMU predict，否则没法process DR了
-    auto dr_state = motion_estimator_->GetDeadReckoningState();
-
-    if (!dr_state.pose_is_ok_) {
-        return;
-    }
-
-    // /// 停车判定
-    // constexpr auto kThVbrbStill = 0.05;  // 0.08;
-    // constexpr auto kThOmegaStill = 0.05;
-
-    // if (dr_state.GetVel().norm() < kThVbrbStill && imu->angular_velocity.norm() < kThOmegaStill) {
-    //     dr_state.is_parking_ = true;
-    //     dr_state.SetVel(Vec3d::Zero());
-    // }
-
-    /// 如果没有odm, 用lio替代DR
-
-    // LOG(INFO) << "dr state: " << std::setprecision(12) << dr_state.timestamp_ << " "
-    //           << dr_state.GetPose().translation().transpose()
-    //           << ", q=" << dr_state.GetPose().unit_quaternion().coeffs().transpose();
-
-    localizer_->FeedDeadReckoning(dr_state);
-    fusion_engine_->FeedDeadReckoning(dr_state);
+    sensor_pipeline_->ProcessIMU(imu);
 }
 
 // void Localization::ProcessOdomMsg(const nav_msgs::msg::Odometry::SharedPtr odom_msg) {
@@ -283,6 +181,9 @@ void Localization::ProcessIMUMsg(IMUPtr imu) {
 // }
 
 void Localization::Finish() {
+    if (sensor_pipeline_) {
+        sensor_pipeline_->Finish();
+    }
     if (localizer_) {
         localizer_->Finish();
     }
@@ -291,7 +192,6 @@ void Localization::Finish() {
     }
 
     lidar_loc_proc_cloud_.Quit();
-    lidar_odom_proc_cloud_.Quit();
 }
 
 void Localization::SetExternalPose(const Eigen::Quaterniond& q, const Eigen::Vector3d& t) {

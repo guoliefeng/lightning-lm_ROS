@@ -33,6 +33,7 @@ add_library(${PROJECT_NAME}.libs SHARED
         core/localization/pose_graph/pose_extrapolator.cc
         core/localization/localization_builder.cc
         core/localization/localization.cpp
+        pipelines/motion_pipeline.cc
 
         utils/timer.cc
         utils/pointcloud_utils.cc

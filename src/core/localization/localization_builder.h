@@ -6,6 +6,7 @@
 #include "interfaces/fusion_engine.h"
 #include "interfaces/localizer.h"
 #include "interfaces/motion_estimator.h"
+#include "interfaces/sensor_pipeline.h"
 
 namespace lightning::ui {
 class PangolinWindow;
@@ -17,6 +18,7 @@ struct LocalizationComponents {
     std::shared_ptr<IMotionEstimator> motion_estimator = nullptr;
     std::shared_ptr<ILocalizer> localizer = nullptr;
     std::shared_ptr<IFusionEngine> fusion_engine = nullptr;
+    std::shared_ptr<ISensorPipeline> sensor_pipeline = nullptr;
 };
 
 class LocalizationBuilder {
@@ -24,6 +26,7 @@ class LocalizationBuilder {
     static LocalizationComponents BuildLocalizationComponents(const std::string& yaml_path,
                                                              const std::string& global_map_path,
                                                              bool with_ui,
+                                                             bool online_mode,
                                                              std::shared_ptr<ui::PangolinWindow> ui);
 };
 

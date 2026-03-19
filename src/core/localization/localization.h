@@ -1,16 +1,17 @@
 #pragma once
 
 #include <geometry_msgs/TransformStamped.h>
+#include <sensor_msgs/PointCloud2.h>
 #include <std_msgs/Int32.h>
 
 #include "common/imu.h"
 #include "common/std_types.h"
-#include "core/lio/pointcloud_preprocess.h"
 #include "core/localization/localization_result.h"
 #include "core/system/async_message_process.h"
 #include "interfaces/fusion_engine.h"
 #include "interfaces/localizer.h"
-#include "interfaces/motion_estimator.h"
+#include "interfaces/sensor_pipeline.h"
+#include "livox_ros_driver/CustomMsg.h"
 
 /// 预声明
 namespace lightning {
@@ -72,7 +73,6 @@ class Localization {
     void Finish();
 
     /// 异步处理函数
-    void LidarOdomProcCloud(CloudPtr);
     void LidarLocProcCloud(CloudPtr);
 
     using TFCallback = std::function<void(const geometry_msgs::TransformStamped& odom)>;
@@ -93,13 +93,6 @@ class Localization {
     std::mutex global_mutex_;  // 防止处理过程中被重复init
     Options options_;
 
-    /// 预处理
-    std::shared_ptr<PointCloudPreprocess> preprocess_ = nullptr;  // point cloud preprocess
-
-    /// 前端
-    std::shared_ptr<IMotionEstimator> motion_estimator_ = nullptr;
-    Keyframe::Ptr last_keyframe_ = nullptr;
-
     // ui
     std::shared_ptr<ui::PangolinWindow> ui_ = nullptr;
 
@@ -108,9 +101,9 @@ class Localization {
 
     // lidar localization
     std::shared_ptr<ILocalizer> localizer_;
+    std::shared_ptr<ISensorPipeline> sensor_pipeline_ = nullptr;
 
     /// TODO async 处理
-    sys::AsyncMessageProcess<CloudPtr> lidar_odom_proc_cloud_;  // lidar odom 处理点云
     sys::AsyncMessageProcess<CloudPtr> lidar_loc_proc_cloud_;   // lidar loc 处理点云
 
     /// 结果数据 =====================================================================================================
