@@ -2,12 +2,10 @@
 
 #include <functional>
 
-#include <sensor_msgs/PointCloud2.h>
-
 #include "common/imu.h"
 #include "common/nav_state.h"
 #include "common/point_def.h"
-#include "livox_ros_driver/CustomMsg.h"
+#include "common/sensor_cloud_input.h"
 
 namespace lightning::loc {
 
@@ -27,9 +25,7 @@ class ISensorPipeline {
     virtual void Finish() = 0;
 
     virtual void ProcessIMU(IMUPtr imu) = 0;
-    virtual void ProcessCloud(CloudPtr cloud) = 0;
-    virtual void ProcessPointCloud2(const sensor_msgs::PointCloud2::ConstPtr& cloud) = 0;
-    virtual void ProcessLivoxCloud(const livox_ros_driver::CustomMsg::ConstPtr& cloud) = 0;
+    virtual void ProcessCloud(const SensorCloudInput& cloud) = 0;
 };
 
 }  // namespace lightning::loc

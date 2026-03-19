@@ -1,10 +1,10 @@
 #pragma once
 
 #include <geometry_msgs/TransformStamped.h>
-#include <sensor_msgs/PointCloud2.h>
 #include <std_msgs/Int32.h>
 
 #include "common/imu.h"
+#include "common/sensor_cloud_input.h"
 #include "common/std_types.h"
 #include "core/localization/localization_result.h"
 #include "core/system/async_message_process.h"
@@ -12,7 +12,6 @@
 #include "interfaces/localizer.h"
 #include "interfaces/localization_runtime.h"
 #include "interfaces/sensor_pipeline.h"
-#include "livox_ros_driver/CustomMsg.h"
 
 /// 预声明
 namespace lightning {
@@ -58,21 +57,15 @@ class Localization : public ILocalizationRuntime {
     bool Init(const std::string& yaml_path, const std::string& global_map_path) override;
 
     void FeedImu(IMUPtr imu) override { ProcessIMUMsg(imu); }
-    void FeedPointCloud2(const sensor_msgs::PointCloud2::ConstPtr& cloud) override { ProcessLidarMsg(cloud); }
-    void FeedLivoxCloud(const livox_ros_driver::CustomMsg::ConstPtr& cloud) override {
-        ProcessLivoxLidarMsg(cloud);
-    }
+    void FeedCloud(const SensorCloudInput& cloud) override { ProcessCloud(cloud); }
     void SetInitialPose(const SE3& pose) override { SetExternalPose(pose.unit_quaternion(), pose.translation()); }
     void Finish() override;
     void SetTFCallback(TFCallback callback) override;
     void SetLocStateCallback(LocStateCallback callback) override;
 
-    /// 处理lidar消息
-    void ProcessLidarMsg(const sensor_msgs::PointCloud2::ConstPtr laser_msg);
-    void ProcessLivoxLidarMsg(const livox_ros_driver::CustomMsg::ConstPtr laser_msg);
-
     /// 处理IMU消息
     void ProcessIMUMsg(IMUPtr imu);
+    void ProcessCloud(const SensorCloudInput& cloud);
 
     // void ProcessOdomMsg(const nav_msgs::msg::Odometry::SharedPtr odom_msg) override;
 
@@ -85,9 +78,6 @@ class Localization : public ILocalizationRuntime {
 
     /// 异步处理函数
     void LidarLocProcCloud(CloudPtr);
-
-    using PointcloudBodyCallback = std::function<void(const sensor_msgs::PointCloud2& pointcloud)>;
-    using PointcloudWorldCallback = std::function<void(const sensor_msgs::PointCloud2& pointcloud)>;
 
     // void SetPathCallback(std::function<void(const nav_msgs::msg::Path& path)>&& callback);
     // void SetPointcloudWorldCallback(std::function<void(const sensor_msgs::msg::PointCloud2& pointcloud)>&& callback);
@@ -118,8 +108,6 @@ class Localization : public ILocalizationRuntime {
     /// 框架相关
     TFCallback tf_callback_;
     LocStateCallback loc_state_callback_;
-    PointcloudBodyCallback pointcloud_body_callback_;
-    PointcloudWorldCallback pointcloud_world_callback_;
 
     /// 输入检查
     double last_imu_time_ = 0;

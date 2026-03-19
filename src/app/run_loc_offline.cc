@@ -5,8 +5,8 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
-#include "core/localization/localization.h"
-#include "ui/pangolin_window.h"
+#include "bridges/localization_bridge.h"
+#include "core/localization/localization_runtime_factory.h"
 #include "utils/timer.h"
 #include "wrapper/bag_io.h"
 #include "wrapper/ros_utils.h"
@@ -33,11 +33,11 @@ int main(int argc, char** argv) {
 
     RosbagIO rosbag(FLAGS_input_bag);
 
-    loc::Localization::Options options;
+    loc::LocalizationRuntimeOptions options;
     options.online_mode_ = false;
-
-    loc::Localization loc(options);
-    loc.Init(FLAGS_config, FLAGS_map_path);
+    auto runtime = loc::CreateLocalizationRuntime(options);
+    loc::LocalizationBridge loc_bridge(runtime);
+    loc_bridge.Init(FLAGS_config, FLAGS_map_path);
 
     lightning::YAML_IO yaml(FLAGS_config);
     std::string lidar_topic = yaml.GetValue<std::string>("common", "lidar_topic");
@@ -45,27 +45,27 @@ int main(int argc, char** argv) {
 
     rosbag
         .AddImuHandle(imu_topic,
-                      [&loc](IMUPtr imu) {
-                          loc.ProcessIMUMsg(imu);
+                      [&loc_bridge](IMUPtr imu) {
+                          loc_bridge.ProcessIMU(imu);
                           usleep(1000);
                           return true;
                       })
         .AddPointCloud2Handle(lidar_topic,
-                              [&loc](const sensor_msgs::PointCloud2::ConstPtr& cloud) {
-                                  loc.ProcessLidarMsg(cloud);
+                              [&loc_bridge](const sensor_msgs::PointCloud2::ConstPtr& cloud) {
+                                  loc_bridge.ProcessPointCloud2(cloud);
                                   usleep(1000);
                                   return true;
                               })
         .AddLivoxCloudHandle("/livox/lidar",
-                             [&loc](const livox_ros_driver::CustomMsg::ConstPtr& cloud) {
-                                 loc.ProcessLivoxLidarMsg(cloud);
+                             [&loc_bridge](const livox_ros_driver::CustomMsg::ConstPtr& cloud) {
+                                 loc_bridge.ProcessLivoxCloud(cloud);
                                  usleep(1000);
                                  return true;
                              })
         .Go();
 
     Timer::PrintAll();
-    loc.Finish();
+    loc_bridge.Finish();
 
     LOG(INFO) << "done";
 

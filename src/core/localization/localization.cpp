@@ -1,6 +1,3 @@
-#include <pcl/common/transforms.h>
-#include <pcl_conversions/pcl_conversions.h>
-
 #include "core/localization/localization.h"
 #include "core/localization/localization_builder.h"
 #include "io/yaml_io.h"
@@ -95,22 +92,13 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
     return true;
 }
 
-void Localization::ProcessLidarMsg(const sensor_msgs::PointCloud2::ConstPtr cloud) {
+void Localization::ProcessCloud(const SensorCloudInput& cloud) {
     UL lock(global_mutex_);
     if (localizer_ == nullptr || sensor_pipeline_ == nullptr || fusion_engine_ == nullptr) {
         return;
     }
 
-    sensor_pipeline_->ProcessPointCloud2(cloud);
-}
-
-void Localization::ProcessLivoxLidarMsg(const livox_ros_driver::CustomMsg::ConstPtr cloud) {
-    UL lock(global_mutex_);
-    if (localizer_ == nullptr || sensor_pipeline_ == nullptr || fusion_engine_ == nullptr) {
-        return;
-    }
-
-    sensor_pipeline_->ProcessLivoxCloud(cloud);
+    sensor_pipeline_->ProcessCloud(cloud);
 }
 
 void Localization::LidarLocProcCloud(CloudPtr scan_undist) {

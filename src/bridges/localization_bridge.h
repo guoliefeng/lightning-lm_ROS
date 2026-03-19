@@ -3,7 +3,10 @@
 #include <memory>
 #include <string>
 
+#include <sensor_msgs/PointCloud2.h>
+
 #include "interfaces/localization_runtime.h"
+#include "livox_ros_driver/CustomMsg.h"
 
 namespace lightning::loc {
 

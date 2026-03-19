@@ -28,11 +28,10 @@ class MotionPipeline : public ISensorPipeline {
     void Finish() override;
 
     void ProcessIMU(IMUPtr imu) override;
-    void ProcessCloud(CloudPtr cloud) override;
-    void ProcessPointCloud2(const sensor_msgs::PointCloud2::ConstPtr& cloud) override;
-    void ProcessLivoxCloud(const livox_ros_driver::CustomMsg::ConstPtr& cloud) override;
+    void ProcessCloud(const SensorCloudInput& cloud) override;
 
    private:
+    void DispatchCloud(CloudPtr cloud);
     void HandleCloud(CloudPtr cloud);
 
     Options options_;

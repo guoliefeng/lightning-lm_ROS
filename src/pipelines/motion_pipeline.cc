@@ -42,34 +42,32 @@ void MotionPipeline::ProcessIMU(IMUPtr imu) {
     }
 }
 
-void MotionPipeline::ProcessCloud(CloudPtr cloud) {
+void MotionPipeline::ProcessCloud(const SensorCloudInput& cloud_input) {
+    if (cloud_input.Empty()) {
+        return;
+    }
+
+    if (cloud_input.cloud != nullptr) {
+        DispatchCloud(cloud_input.cloud);
+        return;
+    }
+
+    if (preprocess_ == nullptr || !cloud_input.converter) {
+        return;
+    }
+
+    CloudPtr laser_cloud(new PointCloudType);
+    cloud_input.converter(*preprocess_, laser_cloud);
+    laser_cloud->header.stamp = cloud_input.stamp_ns;
+    DispatchCloud(laser_cloud);
+}
+
+void MotionPipeline::DispatchCloud(CloudPtr cloud) {
     if (options_.online_mode_) {
         lidar_odom_proc_cloud_.AddMessage(cloud);
     } else {
         HandleCloud(cloud);
     }
-}
-
-void MotionPipeline::ProcessPointCloud2(const sensor_msgs::PointCloud2::ConstPtr& cloud) {
-    if (preprocess_ == nullptr) {
-        return;
-    }
-
-    CloudPtr laser_cloud(new PointCloudType);
-    preprocess_->Process(cloud, laser_cloud);
-    laser_cloud->header.stamp = cloud->header.stamp.sec * 1e9 + cloud->header.stamp.nsec;
-    ProcessCloud(laser_cloud);
-}
-
-void MotionPipeline::ProcessLivoxCloud(const livox_ros_driver::CustomMsg::ConstPtr& cloud) {
-    if (preprocess_ == nullptr) {
-        return;
-    }
-
-    CloudPtr laser_cloud(new PointCloudType);
-    preprocess_->Process(cloud, laser_cloud);
-    laser_cloud->header.stamp = cloud->header.stamp.sec * 1e9 + cloud->header.stamp.nsec;
-    ProcessCloud(laser_cloud);
 }
 
 void MotionPipeline::HandleCloud(CloudPtr cloud) {

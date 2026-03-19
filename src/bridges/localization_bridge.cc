@@ -1,6 +1,38 @@
 #include "bridges/localization_bridge.h"
 
+#include "core/lio/pointcloud_preprocess.h"
+
 namespace lightning::loc {
+
+namespace {
+
+SensorCloudInput MakeSensorCloudInput(const sensor_msgs::PointCloud2::ConstPtr& cloud) {
+    SensorCloudInput input;
+    if (cloud == nullptr) {
+        return input;
+    }
+
+    input.stamp_ns = static_cast<std::uint64_t>(cloud->header.stamp.sec) * 1000000000ULL + cloud->header.stamp.nsec;
+    input.converter = [cloud](PointCloudPreprocess& preprocess, CloudPtr& laser_cloud) {
+        preprocess.Process(cloud, laser_cloud);
+    };
+    return input;
+}
+
+SensorCloudInput MakeSensorCloudInput(const livox_ros_driver::CustomMsg::ConstPtr& cloud) {
+    SensorCloudInput input;
+    if (cloud == nullptr) {
+        return input;
+    }
+
+    input.stamp_ns = static_cast<std::uint64_t>(cloud->header.stamp.sec) * 1000000000ULL + cloud->header.stamp.nsec;
+    input.converter = [cloud](PointCloudPreprocess& preprocess, CloudPtr& laser_cloud) {
+        preprocess.Process(cloud, laser_cloud);
+    };
+    return input;
+}
+
+}  // namespace
 
 LocalizationBridge::LocalizationBridge(std::shared_ptr<ILocalizationRuntime> runtime) : runtime_(std::move(runtime)) {}
 
@@ -19,13 +51,13 @@ void LocalizationBridge::ProcessIMU(const IMUPtr& imu) {
 
 void LocalizationBridge::ProcessPointCloud2(const sensor_msgs::PointCloud2::ConstPtr& cloud) {
     if (runtime_) {
-        runtime_->FeedPointCloud2(cloud);
+        runtime_->FeedCloud(MakeSensorCloudInput(cloud));
     }
 }
 
 void LocalizationBridge::ProcessLivoxCloud(const livox_ros_driver::CustomMsg::ConstPtr& cloud) {
     if (runtime_) {
-        runtime_->FeedLivoxCloud(cloud);
+        runtime_->FeedCloud(MakeSensorCloudInput(cloud));
     }
 }
 
