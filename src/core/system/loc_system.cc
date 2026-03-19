@@ -4,7 +4,7 @@
 #include <csignal>
 
 #include "bridges/localization_bridge.h"
-#include "core/localization/localization.h"
+#include "core/localization/localization_runtime_factory.h"
 #include "core/system/loc_system.h"
 #include "io/yaml_io.h"
 #include "utils/timer.h"
@@ -24,9 +24,9 @@ LocSystem::~LocSystem() {
 }
 
 bool LocSystem::Init(const std::string &yaml_path) {
-    loc::Localization::Options opt;
+    loc::LocalizationRuntimeOptions opt;
     opt.online_mode_ = true;
-    auto runtime = std::make_shared<loc::Localization>(opt);
+    auto runtime = loc::CreateLocalizationRuntime(opt);
     loc_bridge_ = std::make_shared<loc::LocalizationBridge>(runtime);
 
     YAML_IO yaml(yaml_path);
