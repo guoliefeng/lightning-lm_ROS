@@ -3,8 +3,9 @@
 //
 #include <csignal>
 
-#include "core/system/loc_system.h"
+#include "bridges/localization_bridge.h"
 #include "core/localization/localization.h"
+#include "core/system/loc_system.h"
 #include "io/yaml_io.h"
 #include "utils/timer.h"
 #include "wrapper/ros_utils.h"
@@ -16,12 +17,17 @@ LocSystem::LocSystem(LocSystem::Options options) : options_(options) {
     signal(SIGINT, lightning::debug::SigHandle);
 }
 
-LocSystem::~LocSystem() { loc_->Finish(); }
+LocSystem::~LocSystem() {
+    if (loc_bridge_) {
+        loc_bridge_->Finish();
+    }
+}
 
 bool LocSystem::Init(const std::string &yaml_path) {
     loc::Localization::Options opt;
     opt.online_mode_ = true;
-    loc_ = std::make_shared<loc::Localization>(opt);
+    auto runtime = std::make_shared<loc::Localization>(opt);
+    loc_bridge_ = std::make_shared<loc::LocalizationBridge>(runtime);
 
     YAML_IO yaml(yaml_path);
 
@@ -59,11 +65,11 @@ bool LocSystem::Init(const std::string &yaml_path) {
 
     if (options_.pub_tf_) {
         tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>();
-        loc_->SetTFCallback(
+        loc_bridge_->SetTFCallback(
             [this](const geometry_msgs::TransformStamped &pose) { tf_broadcaster_->sendTransform(pose); });
     }
 
-    bool ret = loc_->Init(yaml_path, map_path);
+    bool ret = loc_bridge_->Init(yaml_path, map_path);
     if (ret) {
         LOG(INFO) << "online loc node has been created.";
     }
@@ -75,25 +81,25 @@ void LocSystem::SetInitPose(const SE3 &pose) {
     LOG(INFO) << "set init pose: " << pose.translation().transpose() << ", "
               << pose.unit_quaternion().coeffs().transpose();
 
-    loc_->SetExternalPose(pose.unit_quaternion(), pose.translation());
+    loc_bridge_->SetInitialPose(pose);
     loc_started_ = true;
 }
 
 void LocSystem::ProcessIMU(const IMUPtr &imu) {
     if (loc_started_) {
-        loc_->ProcessIMUMsg(imu);
+        loc_bridge_->ProcessIMU(imu);
     }
 }
 
 void LocSystem::ProcessLidar(const sensor_msgs::PointCloud2::ConstPtr &cloud) {
     if (loc_started_) {
-        loc_->ProcessLidarMsg(cloud);
+        loc_bridge_->ProcessPointCloud2(cloud);
     }
 }
 
 void LocSystem::ProcessLidar(const livox_ros_driver::CustomMsg::ConstPtr &cloud) {
     if (loc_started_) {
-        loc_->ProcessLivoxLidarMsg(cloud);
+        loc_bridge_->ProcessLivoxCloud(cloud);
     }
 }
 

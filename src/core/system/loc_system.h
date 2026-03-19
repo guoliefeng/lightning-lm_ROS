@@ -19,7 +19,7 @@
 namespace lightning {
 
 namespace loc {
-class Localization;
+class LocalizationBridge;
 }
 
 class LocSystem {
@@ -50,7 +50,7 @@ class LocSystem {
    private:
     Options options_;
 
-    std::shared_ptr<loc::Localization> loc_ = nullptr;  // 定位接口
+    std::shared_ptr<loc::LocalizationBridge> loc_bridge_ = nullptr;  // 定位桥接层
 
     std::atomic_bool loc_started_ = false;  // 是否开启定位
     std::atomic_bool map_loaded_ = false;   // 地图是否已载入

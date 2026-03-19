@@ -202,6 +202,10 @@ void Localization::SetExternalPose(const Eigen::Quaterniond& q, const Eigen::Vec
     }
 }
 
-void Localization::SetTFCallback(Localization::TFCallback&& callback) { tf_callback_ = callback; }
+void Localization::SetTFCallback(Localization::TFCallback callback) { tf_callback_ = std::move(callback); }
+
+void Localization::SetLocStateCallback(Localization::LocStateCallback callback) {
+    loc_state_callback_ = std::move(callback);
+}
 
 }  // namespace lightning::loc

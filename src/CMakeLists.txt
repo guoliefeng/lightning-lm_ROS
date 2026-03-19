@@ -19,6 +19,8 @@ add_library(${PROJECT_NAME}.libs SHARED
         core/maps/tiled_map.cc
         core/maps/tiled_map_chunk.cc
 
+        bridges/localization_bridge.cc
+
         adapters/laser_mapping_adapter.cc
         adapters/lidar_loc_adapter.cc
         adapters/pgo_adapter.cc
