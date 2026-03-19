@@ -3,12 +3,12 @@
 //
 #include <csignal>
 
-#include "bridges/localization_bridge.h"
+#include "bridges/localization_bridge_ros1.h"
+#include "common/options.h"
 #include "core/localization/localization_runtime_factory.h"
 #include "core/system/loc_system.h"
 #include "io/yaml_io.h"
 #include "utils/timer.h"
-#include "wrapper/ros_utils.h"
 
 namespace lightning {
 
@@ -27,7 +27,7 @@ bool LocSystem::Init(const std::string &yaml_path) {
     loc::LocalizationRuntimeOptions opt;
     opt.online_mode_ = true;
     auto runtime = loc::CreateLocalizationRuntime(opt);
-    loc_bridge_ = std::make_shared<loc::LocalizationBridge>(runtime);
+    loc_bridge_ = std::make_shared<loc::LocalizationBridgeRos1>(runtime);
 
     YAML_IO yaml(yaml_path);
 
@@ -44,13 +44,7 @@ bool LocSystem::Init(const std::string &yaml_path) {
 
     imu_sub_ = node_->subscribe<sensor_msgs::Imu>(
         imu_topic_, 10, [this](const sensor_msgs::Imu::ConstPtr& msg) {
-            IMUPtr imu = std::make_shared<IMU>();
-            imu->timestamp = ToSec(msg->header.stamp);
-            imu->linear_acceleration =
-                Vec3d(msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z);
-            imu->angular_velocity = Vec3d(msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z);
-
-            ProcessIMU(imu);
+            ProcessIMU(msg);
         });
 
     cloud_sub_ = node_->subscribe<sensor_msgs::PointCloud2>(
@@ -85,7 +79,7 @@ void LocSystem::SetInitPose(const SE3 &pose) {
     loc_started_ = true;
 }
 
-void LocSystem::ProcessIMU(const IMUPtr &imu) {
+void LocSystem::ProcessIMU(const sensor_msgs::Imu::ConstPtr &imu) {
     if (loc_started_) {
         loc_bridge_->ProcessIMU(imu);
     }

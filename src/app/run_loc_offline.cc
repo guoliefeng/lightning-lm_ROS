@@ -5,7 +5,7 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
-#include "bridges/localization_bridge.h"
+#include "bridges/localization_bridge_ros1.h"
 #include "core/localization/localization_runtime_factory.h"
 #include "utils/timer.h"
 #include "wrapper/bag_io.h"
@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     loc::LocalizationRuntimeOptions options;
     options.online_mode_ = false;
     auto runtime = loc::CreateLocalizationRuntime(options);
-    loc::LocalizationBridge loc_bridge(runtime);
+    loc::LocalizationBridgeRos1 loc_bridge(runtime);
     loc_bridge.Init(FLAGS_config, FLAGS_map_path);
 
     lightning::YAML_IO yaml(FLAGS_config);

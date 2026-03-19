@@ -13,13 +13,11 @@
 #include "livox_ros_driver/CustomMsg.h"
 
 #include "common/eigen_types.h"
-#include "common/imu.h"
-#include "common/keyframe.h"
 
 namespace lightning {
 
 namespace loc {
-class LocalizationBridge;
+class LocalizationBridgeRos1;
 }
 
 class LocSystem {
@@ -38,7 +36,7 @@ class LocSystem {
     void SetInitPose(const SE3& pose);
 
     /// 处理IMU
-    void ProcessIMU(const lightning::IMUPtr& imu);
+    void ProcessIMU(const sensor_msgs::Imu::ConstPtr& imu);
 
     /// 处理点云
     void ProcessLidar(const sensor_msgs::PointCloud2::ConstPtr& cloud);
@@ -50,7 +48,7 @@ class LocSystem {
    private:
     Options options_;
 
-    std::shared_ptr<loc::LocalizationBridge> loc_bridge_ = nullptr;  // 定位桥接层
+    std::shared_ptr<loc::LocalizationBridgeRos1> loc_bridge_ = nullptr;  // 定位桥接层
 
     std::atomic_bool loc_started_ = false;  // 是否开启定位
     std::atomic_bool map_loaded_ = false;   // 地图是否已载入
@@ -68,6 +66,6 @@ class LocSystem {
     ros::Subscriber livox_sub_;
 };
 
-};  // namespace lightning
+}  // namespace lightning
 
 #endif  // LIGHTNING_LOC_SYSTEM_H
