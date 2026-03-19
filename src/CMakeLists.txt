@@ -18,6 +18,7 @@ add_library(${PROJECT_NAME}.libs SHARED
 
         core/maps/tiled_map.cc
         core/maps/tiled_map_chunk.cc
+        map_runtime/dynamic_map_manager.cc
 
         bridges/localization_bridge.cc
         bridges/localization_bridge_ros1.cc

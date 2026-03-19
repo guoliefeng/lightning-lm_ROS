@@ -11,7 +11,7 @@
 #include "common/nav_state.h"
 #include "common/timed_pose.h"
 #include "core/localization/localization_result.h"
-#include "core/maps/tiled_map.h"
+#include "interfaces/dynamic_map_manager.h"
 
 #include "pclomp/ndt_omp_impl.hpp"
 
@@ -97,7 +97,7 @@ class LidarLoc {
     bool InitWithFP(CloudPtr input, const SE3& fp_pose);
 
     /// 更新全局地图
-    bool UpdateGlobalMap();
+    bool UpdateGlobalMap(const std::shared_ptr<TiledMap>& map);
 
     /// @brief 定位是否已经成功初始化
     bool LocInited();
@@ -231,9 +231,8 @@ class LidarLoc {
     bool lo_reliable_ = true;
     int lo_reliable_cnt_ = 0;
 
-    SE3 last_abs_pose_;            // 上一次绝对定位，绝对定位来自于地图匹配得到的位姿
-    TimedPose last_dyn_upd_pose_;  // 上次更新动态图层时使用的位姿
-    SE3 current_abs_pose_;         // 本次的绝对定位
+    SE3 last_abs_pose_;     // 上一次绝对定位，绝对定位来自于地图匹配得到的位姿
+    SE3 current_abs_pose_;  // 本次的绝对定位
     bool last_abs_pose_set_ = false;
     double current_score_ = 1e5;  /// 设一个大分值，若定位一开始就匹配失败，则可以直接用GPS重置
     int match_fail_count_ = 0;
@@ -256,10 +255,8 @@ class LidarLoc {
     double fp_last_tried_time_ = 0;
 
     bool update_map_quit_ = false;
-    std::thread update_map_thread_;            // 地图更新
-    std::shared_ptr<TiledMap> map_ = nullptr;  // 地图
-
-    bool has_set_pose_ = false;  // 外部set_pose标志位，若存在则本次动态图层不落盘
+    std::thread update_map_thread_;   // 地图更新
+    std::shared_ptr<IDynamicMapManager> dynamic_map_manager_ = nullptr;
 
     std::ofstream recover_pose_out_;
 };

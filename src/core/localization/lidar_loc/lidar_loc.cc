@@ -1,8 +1,6 @@
 #include <algorithm>
 #include <execution>
 
-#include <pcl/common/transforms.h>
-#include <pcl/filters/passthrough.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/pcl_base.h>
 #include <pcl/registration/ndt.h>
@@ -14,6 +12,7 @@
 #include "glog/logging.h"
 #include "io/file_io.h"
 #include "io/yaml_io.h"
+#include "map_runtime/dynamic_map_manager.h"
 #include "ui/pangolin_window.h"
 #include "utils/timer.h"
 
@@ -91,14 +90,39 @@ bool LidarLoc::Init(const std::string& config_path) {
     options_.map_option_.save_dyn_when_quit_ = yaml.GetValue<bool>("maps", "save_dyn_when_quit");
     options_.map_option_.save_dyn_when_unload_ = yaml.GetValue<bool>("maps", "save_dyn_when_unload");
 
-    map_ = std::make_shared<TiledMap>(options_.map_option_);
-    map_->LoadMapIndex();
+    DynamicMapManagerOptions dynamic_map_options;
+    dynamic_map_options.map_option_.map_path_ = options_.map_option_.map_path_;
+    dynamic_map_options.map_option_.chunk_size_ = options_.map_option_.chunk_size_;
+    dynamic_map_options.map_option_.inv_chunk_size_ = options_.map_option_.inv_chunk_size_;
+    dynamic_map_options.map_option_.voxel_size_in_chunk_ = options_.map_option_.voxel_size_in_chunk_;
+    dynamic_map_options.map_option_.save_dynamic_layer_ = options_.map_option_.save_dynamic_layer_;
+    dynamic_map_options.map_option_.load_map_size_ = options_.map_option_.load_map_size_;
+    dynamic_map_options.map_option_.unload_map_size_ = options_.map_option_.unload_map_size_;
+    dynamic_map_options.map_option_.enable_dynamic_polygon_ = options_.map_option_.enable_dynamic_polygon_;
+    dynamic_map_options.map_option_.max_pts_in_dyn_chunk_ = options_.map_option_.max_pts_in_dyn_chunk_;
+    dynamic_map_options.map_option_.policy_ = options_.map_option_.policy_;
+    dynamic_map_options.map_option_.delete_when_unload_ = options_.map_option_.delete_when_unload_;
+    dynamic_map_options.map_option_.load_dyn_cloud_ = options_.map_option_.load_dyn_cloud_;
+    dynamic_map_options.map_option_.save_dyn_when_quit_ = options_.map_option_.save_dyn_when_quit_;
+    dynamic_map_options.map_option_.save_dyn_when_unload_ = options_.map_option_.save_dyn_when_unload_;
+    dynamic_map_options.update_dynamic_cloud_ = options_.update_dynamic_cloud_;
+    dynamic_map_options.update_kf_dis_ = options_.update_kf_dis_;
+    dynamic_map_options.update_kf_time_ = options_.update_kf_time_;
+    dynamic_map_options.update_lidar_loc_score_ = options_.update_lidar_loc_score_;
+    dynamic_map_options.dynamic_layer_filter_z_max_ = options_.filter_z_max_;
 
-    auto fps = map_->GetAllFP();
+    dynamic_map_manager_ = std::make_shared<DynamicMapManager>();
+    if (!dynamic_map_manager_->Init(dynamic_map_options, ui_)) {
+        return false;
+    }
+    dynamic_map_manager_->SetTargetRebuildCallback(
+        [this](const std::shared_ptr<TiledMap>& map) { UpdateGlobalMap(map); });
+
+    auto fps = dynamic_map_manager_->GetAllFunctionalPoints();
     if (!fps.empty()) {
-        map_->LoadOnPose(fps.front().pose_);
+        dynamic_map_manager_->LoadOnPose(fps.front().pose_);
         /// 更新一次地图，保证有初始数据
-        UpdateGlobalMap();
+        dynamic_map_manager_->RebuildTargetIfNeeded();
     }
 
     /// load recover pose if exist
@@ -113,7 +137,7 @@ bool LidarLoc::Init(const std::string& config_path) {
         FunctionalPoint fp_recover;
         fp_recover.name_ = "recover";
         fp_recover.pose_ = pose;
-        map_->AddFP(fp_recover);
+        dynamic_map_manager_->AddFunctionalPoint(fp_recover);
     }
 
     update_map_thread_ = std::thread([this]() { LidarLoc::UpdateMapThread(); });
@@ -327,7 +351,9 @@ bool LidarLoc::InitWithFP(CloudPtr input, const SE3& fp_pose) {
 void LidarLoc::ResetLastPose(const SE3& last_pose) {
     last_abs_pose_ = last_pose;
 
-    // TODO：清空动态图层
+    if (dynamic_map_manager_) {
+        dynamic_map_manager_->ResetDynamicLayer();
+    }
 
     return;
 }
@@ -356,7 +382,11 @@ bool LidarLoc::TryOtherSolution(CloudPtr input, SE3& pose) {
     return false;
 }
 
-bool LidarLoc::UpdateGlobalMap() {
+bool LidarLoc::UpdateGlobalMap(const std::shared_ptr<TiledMap>& map) {
+    if (map == nullptr) {
+        return false;
+    }
+
     NDTType::Ptr ndt(new NDTType());
     ndt->setResolution(1.0);
     ndt->setNeighborhoodSearchMethod(pclomp::DIRECT7);
@@ -364,7 +394,7 @@ bool LidarLoc::UpdateGlobalMap() {
     ndt->setMaximumIterations(4);
     ndt->setNumThreads(4);
 
-    map_->SetNewTargetForNDT(ndt);
+    map->SetNewTargetForNDT(ndt);
     ndt->initCompute();
 
     UL lock(match_mutex_);
@@ -378,7 +408,7 @@ bool LidarLoc::UpdateGlobalMap() {
         ndt_rough->setMaximumIterations(4);
         ndt_rough->setNumThreads(4);
 
-        map_->SetNewTargetForNDT(ndt_rough);
+        map->SetNewTargetForNDT(ndt_rough);
         // ndt_rough->initCompute();
 
         pcl_ndt_rough_ = ndt_rough;
@@ -390,7 +420,7 @@ bool LidarLoc::UpdateGlobalMap() {
         pcl::VoxelGrid<PointType> voxel;
         auto sz = 0.5;
         voxel.setLeafSize(sz, sz, sz);
-        voxel.setInputCloud(map_->GetAllMap());
+        voxel.setInputCloud(map->GetAllMap());
         voxel.filter(*map_cloud);
         icp->setInputTarget(map_cloud);
         icp->setMaximumIterations(4);
@@ -404,15 +434,8 @@ bool LidarLoc::UpdateGlobalMap() {
 void LidarLoc::UpdateMapThread() {
     LOG(INFO) << "UpdateMapThread thread is running";
     while (!update_map_quit_) {
-        if (map_->MapUpdated() || map_->DynamicMapUpdated()) {
-            UpdateGlobalMap();
-
-            if (ui_) {
-                ui_->UpdatePointCloudGlobal(map_->GetStaticCloud());
-                ui_->UpdatePointCloudDynamic(map_->GetDynamicCloud());
-            }
-
-            map_->CleanMapUpdate();
+        if (dynamic_map_manager_) {
+            dynamic_map_manager_->RebuildTargetIfNeeded();
         }
         usleep(10000);
     }
@@ -499,10 +522,11 @@ void LidarLoc::Align(const CloudPtr& input) {
                           << ", dr pose set: " << current_dr_pose_set_;
             }
 
-            auto all_fps = map_->GetAllFP();
+            auto all_fps = dynamic_map_manager_ ? dynamic_map_manager_->GetAllFunctionalPoints()
+                                                : std::vector<FunctionalPoint>{};
             bool fp_init_success = false;
             for (const auto& fp : all_fps) {
-                map_->LoadOnPose(fp.pose_);
+                dynamic_map_manager_->LoadOnPose(fp.pose_);
                 if (InitWithFP(input, fp.pose_)) {
                     LOG(INFO) << "init with fp: " << fp.name_;
                     fp_init_success = true;
@@ -587,7 +611,9 @@ void LidarLoc::Align(const CloudPtr& input) {
     bool loc_success = false;
 
     /// 注意load on pose存在滞后，优先load on DR
-    map_->LoadOnPose(guess_from_dr);
+    if (dynamic_map_manager_) {
+        dynamic_map_manager_->LoadOnPose(guess_from_dr);
+    }
 
     loc_success_lo = Localize(current_pose_esti, fitness_score, input, output_cloud);  // LO 那个肯定会算
     double score_lo = fitness_score;
@@ -702,35 +728,8 @@ void LidarLoc::Align(const CloudPtr& input) {
     UpdateState(input);
 
     /// 8. 更新动态图层
-    /// 条件：1. 定位成功 2. 与上次更新间隔一定距离 3. RTK与激光定位横纵向误差都小于0.3，或者匹配分值大于1.0
-    bool score_cond = current_score_ > options_.update_lidar_loc_score_;
-
-    if (options_.update_dynamic_cloud_ && loc_success &&
-        (((current_pose_esti.translation() - last_dyn_upd_pose_.pose_.translation()).norm() >
-          options_.update_kf_dis_) ||
-         fabs(current_time - last_dyn_upd_pose_.timestamp_) > options_.update_kf_time_)) {
-        if (score_cond /*  || update_cache_dis_ < options_.max_update_cache_dis_ */) {
-            // LOG(INFO) << "passing through z filter, input:" << input->size();
-            pcl::PassThrough<PointType> pass;
-            pass.setInputCloud(input);
-
-            pass.setFilterFieldName("z");
-            pass.setFilterLimits(0.5, options_.filter_z_max_);
-
-            CloudPtr input_z_filter(new PointCloudType());
-            pass.filter(*input_z_filter);
-
-            if (!input_z_filter->empty()) {
-                CloudPtr cloud_t(new PointCloudType());
-                pcl::transformPointCloud(*input_z_filter, *cloud_t, current_pose_esti.matrix());
-
-                // 以现在的scan来更新地图
-                map_->UpdateDynamicCloud(cloud_t, true);
-
-                last_dyn_upd_pose_.timestamp_ = current_time;
-                last_dyn_upd_pose_.pose_ = current_pose_esti;
-            }
-        }
+    if (loc_success && dynamic_map_manager_) {
+        dynamic_map_manager_->MaybeUpdateDynamicLayer(input, current_pose_esti, current_score_, current_time);
     }
 
     LOG(INFO) << "updating scores";
@@ -935,17 +934,13 @@ bool LidarLoc::AssignDRPose(double timestamp) {
 }
 
 void LidarLoc::Finish() {
-    if (map_) {
+    if (dynamic_map_manager_) {
         LOG(INFO) << "saving maps";
         update_map_quit_ = true;
-        update_map_thread_.join();
-
-        /// 永久保存时，再存储地图
-        if (options_.map_option_.policy_ == TiledMap::DynamicCloudPolicy::PERSISTENT &&
-            options_.map_option_.save_dyn_when_quit_ && !has_set_pose_) {
-            map_->SaveToBin(true);
-            LOG(INFO) << "dynamic maps saved";
+        if (update_map_thread_.joinable()) {
+            update_map_thread_.join();
         }
+        dynamic_map_manager_->Finish();
     }
 }
 
