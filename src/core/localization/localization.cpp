@@ -1,10 +1,8 @@
 #include <pcl/common/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
 
-#include "adapters/laser_mapping_adapter.h"
-#include "adapters/lidar_loc_adapter.h"
-#include "adapters/pgo_adapter.h"
 #include "core/localization/localization.h"
+#include "core/localization/localization_builder.h"
 #include "io/yaml_io.h"
 #include "ui/pangolin_window.h"
 
@@ -24,42 +22,22 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
     YAML_IO yaml(yaml_path);
     options_.with_ui_ = yaml.GetValue<bool>("system", "with_ui");
 
-    /// lidar odom前端
-    LaserMapping::Options opt_lio;
-    opt_lio.is_in_slam_mode_ = false;
-
-    motion_estimator_ = std::make_shared<LaserMappingAdapter>(opt_lio);
-    if (!motion_estimator_->Init(yaml_path)) {
-        LOG(ERROR) << "failed to init lio";
-        return false;
-    }
-    last_keyframe_ = nullptr;
-
-    /// 激光定位
-    LidarLoc::Options lidar_loc_options;
-    lidar_loc_options.update_dynamic_cloud_ = yaml.GetValue<bool>("lidar_loc", "update_dynamic_cloud");
-    lidar_loc_options.force_2d_ = yaml.GetValue<bool>("lidar_loc", "force_2d");
-    lidar_loc_options.map_option_.enable_dynamic_polygon_ = false;
-    lidar_loc_options.map_option_.map_path_ = global_map_path;
-    localizer_ = std::make_shared<LidarLocAdapter>(lidar_loc_options);
-
     if (options_.with_ui_) {
         ui_ = std::make_shared<ui::PangolinWindow>();
         ui_->SetCurrentScanSize(10);
         ui_->Init();
-
-        auto lidar_loc_adapter = std::dynamic_pointer_cast<LidarLocAdapter>(localizer_);
-        if (lidar_loc_adapter) {
-            lidar_loc_adapter->SetUI(ui_);
-        }
     }
 
-    localizer_->Init(yaml_path);
+    auto components =
+        LocalizationBuilder::BuildLocalizationComponents(yaml_path, global_map_path, options_.with_ui_, ui_);
+    if (!components.motion_estimator || !components.localizer || !components.fusion_engine) {
+        return false;
+    }
 
-    /// pose graph
-    auto pgo_adapter = std::make_shared<PGOAdapter>();
-    pgo_adapter->SetDebug(false);
-    fusion_engine_ = pgo_adapter;
+    motion_estimator_ = components.motion_estimator;
+    localizer_ = components.localizer;
+    fusion_engine_ = components.fusion_engine;
+    last_keyframe_ = nullptr;
 
     ///  各模块的异步调用
     options_.enable_lidar_loc_skip_ = yaml.GetValue<bool>("system", "enable_lidar_loc_skip");

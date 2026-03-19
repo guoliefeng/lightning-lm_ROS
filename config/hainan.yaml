@@ -56,7 +56,7 @@ system:
   enable_lidar_odom_skip: false
   lidar_loc_skip_num: 4
   lidar_odom_skip_num: 2
-  map_path: /home/glf/dataDisk/hainan/test
+  map_path: /home/glf/dataDisk/hainan/track3_maptest
   pub_tf: true
 
 loop_closing:

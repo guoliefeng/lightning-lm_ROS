@@ -20,11 +20,10 @@ class LidarLocAdapter : public ILocalizer {
     void FeedLidarOdom(const NavState& state) override;
     void FeedDeadReckoning(const NavState& state) override;
     bool ProcessKeyframeScan(CloudPtr cloud) override;
+    void SetUI(std::shared_ptr<ui::PangolinWindow> ui) override;
     void SetInitialPose(const SE3& pose) override;
     LocalizationResult GetLocalizationResult() const override;
     void Finish() override;
-
-    void SetUI(std::shared_ptr<ui::PangolinWindow> ui);
 
    private:
     std::shared_ptr<LidarLoc> impl_ = nullptr;

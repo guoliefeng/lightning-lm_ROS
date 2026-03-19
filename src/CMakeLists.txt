@@ -31,6 +31,7 @@ add_library(${PROJECT_NAME}.libs SHARED
         core/localization/pose_graph/pgo.cc
         core/localization/pose_graph/pgo_impl.cc
         core/localization/pose_graph/pose_extrapolator.cc
+        core/localization/localization_builder.cc
         core/localization/localization.cpp
 
         utils/timer.cc
