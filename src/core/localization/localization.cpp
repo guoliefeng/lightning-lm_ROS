@@ -58,6 +58,9 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
     options_.enable_lidar_loc_skip_ = yaml.GetValue<bool>("system", "enable_lidar_loc_skip");
     options_.enable_lidar_loc_rviz_ = yaml.GetValue<bool>("system", "enable_lidar_loc_rviz");
     options_.lidar_loc_skip_num_ = yaml.GetValue<int>("system", "lidar_loc_skip_num");
+    options_.enable_lidar_odom_skip_ = yaml.GetValue<bool>("system", "enable_lidar_odom_skip");
+    options_.lidar_odom_skip_num_ = yaml.GetValue<int>("system", "lidar_odom_skip_num");
+    options_.loc_on_kf_ = yaml.GetValue<bool>("lidar_loc", "loc_on_kf");
     lidar_loc_proc_cloud_.SetMaxSize(1);
 
     lidar_loc_proc_cloud_.SetName("激光定位");

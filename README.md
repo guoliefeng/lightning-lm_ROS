@@ -450,7 +450,13 @@ imu和雷达外参默认为零就好，我们对这个不敏感。
    安装 ``` pip install -i https://pypi.tuna.tsinghua.edu.cn/simple rosbags```
 
    转换: ```rosbags-convert --src [你的ROS1_bag文件.bag] --dst [输出ROS2bag目录]```
+## 更新
+### 2025.11.27
 
+- 在LIO模块中添加了Cauchy's kernel
+- 在定位模块中增加了配置： try_self_extrap，默认关闭。也就是定位模块不会根据自身外推的位姿做定位（因为定位间隔较大，车辆运动较大时不准）。
+- 添加了一个livox的配置文件，因为用livox的人比较多
+- 如果建图时设置了固定高度，那么定位也会使用这个地图高度（默认关闭）
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=gaoxiang12/lightning-lm&type=date&legend=top-left)](https://www.star-history.com/#gaoxiang12/lightning-lm&type=date&legend=top-left)
