@@ -38,6 +38,7 @@ class Localization {
         bool enable_lidar_loc_skip_ = true;    // 是否允许激光定位跳帧
         bool enable_lidar_loc_rviz_ = false;   // 是否允许调试用rviz
         int lidar_loc_skip_num_ = 4;           // 如果允许跳帧，跳多少帧
+        bool loc_on_kf_ = false;
     };
 
     Localization(Options options = Options());

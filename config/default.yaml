@@ -88,6 +88,8 @@ lidar_loc:
   update_err_v: 0.2
   update_kf_dis: 2.0
   update_lidar_loc_score: 2.5
+  loc_on_kf: true
+  try_self_extrap: false
 maps:
   delete_when_unload: false
   dyn_cloud_policy: persistent

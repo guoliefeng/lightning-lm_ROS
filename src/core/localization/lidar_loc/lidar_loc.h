@@ -37,7 +37,9 @@ class LidarLoc {
         bool display_realtime_cloud_ = false;          // 是否显示实时点云
         bool debug_ = false;                           // 是否使用单测模式
         LocMethod match_method_ = LocMethod::NDT_OMP;  // 匹配方式
-        bool force_2d_ = true;                        // 强制在2D空间
+        bool try_self_extrap_ = false;                 // 是否尝试自己的外推pose
+        bool with_height_ = true;                      // 建图期间是否带有高度约束？
+        bool force_2d_ = true;                         // 强制在2D空间
         float min_init_confidence_ = 0.1;              // 初始化时要求的最小分值
         bool init_with_fp_ = true;                     // 是否使用功能点进行初始化
         bool enable_parking_static_ = false;           // 是否在静止时输出固定位置
@@ -257,7 +259,7 @@ class LidarLoc {
     bool update_map_quit_ = false;
     std::thread update_map_thread_;            // 地图更新
     std::shared_ptr<TiledMap> map_ = nullptr;  // 地图
-
+    double map_height_ = 0;
     bool has_set_pose_ = false;  // 外部set_pose标志位，若存在则本次动态图层不落盘
 
     std::ofstream recover_pose_out_;

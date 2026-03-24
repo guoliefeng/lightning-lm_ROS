@@ -71,6 +71,8 @@ bool LidarLoc::Init(const std::string& config_path) {
     options_.init_with_fp_ = yaml.GetValue<bool>("lidar_loc", "init_with_fp");
     options_.enable_parking_static_ = yaml.GetValue<bool>("lidar_loc", "enable_parking_static");
     options_.enable_icp_adjust_ = yaml.GetValue<bool>("lidar_loc", "enable_icp_adjust");
+    options_.with_height_ = yaml.GetValue<bool>("loop_closing", "with_height");
+    options_.try_self_extrap_ = yaml.GetValue<bool>("lidar_loc", "try_self_extrap");
 
     lidar_loc::grid_search_angle_step = yaml.GetValue<double>("lidar_loc", "grid_search_angle_step");
     lidar_loc::grid_search_angle_range = yaml.GetValue<double>("lidar_loc", "grid_search_angle_range");
@@ -303,7 +305,7 @@ bool LidarLoc::InitWithFP(CloudPtr input, const SE3& fp_pose) {
         current_score_ = fitness_score;
         LOG(INFO) << "fitness_score is: " << fitness_score << ", global_pose is: " << fp_pose.translation().transpose();
         LOG(INFO) << " [Loc init pose]: " << last_abs_pose_.translation().transpose();
-
+        map_height_ = fp_pose.translation()[2];
         if (current_lo_pose_set_) {
             // 设置上一次的相对定位结果
             last_lo_pose_ = current_lo_pose_;
@@ -576,7 +578,9 @@ void LidarLoc::Align(const CloudPtr& input) {
                   << (guess_from_self.so3().inverse() * guess_from_lo.so3()).log().norm();
         try_self = true;
     }
-
+    if (!options_.try_self_extrap_) {
+        try_self = false;
+    }
     /// 5. 载入地图, 与地图匹配定位
     /// 尝试各种初始估计
     CloudPtr output_cloud(new PointCloudType);
@@ -733,7 +737,7 @@ void LidarLoc::Align(const CloudPtr& input) {
         }
     }
 
-    LOG(INFO) << "updating scores";
+    // LOG(INFO) << "updating scores";
 
     if (lidar_loc_pose_queue_.empty()) {
         lidar_loc_pose_queue_.emplace_back(current_time, current_abs_pose_);
@@ -796,6 +800,8 @@ bool LidarLoc::Localize(SE3& pose, double& confidence, CloudPtr input, CloudPtr 
     bool loc_success = false;
     Eigen::Matrix4f guess_pose = pose.matrix().cast<float>();
 
+    LOG(INFO) << "loc from: " << pose.translation().transpose();
+
     if (pcl_ndt_->getInputTarget() == nullptr) {
         LOG(INFO) << "lidar loc target is null, skip";
         return false;
@@ -815,7 +821,10 @@ bool LidarLoc::Localize(SE3& pose, double& confidence, CloudPtr input, CloudPtr 
     trans = ndt->getFinalTransformation();
     confidence = ndt->getTransformationProbability();
 
-    if (confidence > options_.min_init_confidence_) {
+    // if (confidence > options_.min_init_confidence_) {
+    if (loc_inited_ == false && confidence > options_.min_init_confidence_) {
+        loc_success = true;
+    } else {
         loc_success = true;
     }
 
