@@ -21,7 +21,7 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
 
     if (options_.with_ui_) {
         ui_ = std::make_shared<ui::PangolinWindow>();
-        ui_->SetCurrentScanSize(10);
+        ui_->SetCurrentScanSize(1);
         ui_->Init();
     }
 

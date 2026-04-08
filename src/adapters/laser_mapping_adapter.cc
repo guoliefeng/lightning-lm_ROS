@@ -23,4 +23,6 @@ Keyframe::Ptr LaserMappingAdapter::GetKeyframe() const { return impl_->GetKeyfra
 
 CloudPtr LaserMappingAdapter::GetUndistortedScan() const { return impl_->GetScanUndist(); }
 
+CloudPtr LaserMappingAdapter::GetProjectedCloud() const { return impl_->GetProjCloud(); }
+
 }  // namespace lightning::loc

@@ -296,6 +296,10 @@ void SlamSystem::ProcessLidar(const livox_ros_driver::CustomMsg::ConstPtr& cloud
     }
 }
 
-void SlamSystem::Spin() { if (options_.online_mode_ && node_ != nullptr) { ros::spin(); } }
+void SlamSystem::Spin() {
+    if (options_.online_mode_ && node_ != nullptr) {
+        ros::spin();
+    }
+}
 
 }  // namespace lightning

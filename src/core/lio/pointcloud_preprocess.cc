@@ -1,5 +1,4 @@
 #include "pointcloud_preprocess.h"
-#include <execution>
 
 #include <algorithm>
 #include <cmath>
@@ -24,6 +23,10 @@ void PointCloudPreprocess::Process(const sensor_msgs::PointCloud2 ::ConstPtr &ms
             VelodyneHandler(msg);
             break;
 
+        case LidarType::ROBOSENSE:
+            RoboSenseHandler(msg);
+            break;
+
         case LidarType::MERGED:
             MergedCloudHandler(msg);
             break;
@@ -40,45 +43,53 @@ void PointCloudPreprocess::Process(const livox_ros_driver::CustomMsg::ConstPtr &
     cloud_out_.clear();
     cloud_full_.clear();
 
-    int plsize = msg->point_num;
-
-    cloud_out_.reserve(plsize);
-    cloud_full_.resize(plsize);
-
-    std::vector<bool> is_valid_pt(plsize, false);
-    std::vector<uint> index(plsize - 1);
-    for (uint i = 0; i < plsize - 1; ++i) {
-        index[i] = i + 1;  // 从1开始
+    const int plsize = static_cast<int>(msg->point_num);
+    if (plsize <= 1) {
+        *pcl_out = cloud_out_;
+        return;
     }
 
-    std::for_each(std::execution::par_unseq, index.begin(), index.end(), [&](const uint &i) {
-        if ((msg->points[i].line < num_scans_) &&
-            ((msg->points[i].tag & 0x30) == 0x10 || (msg->points[i].tag & 0x30) == 0x00)) {
-            if (i % point_filter_num_ == 0) {
-                cloud_full_[i].x = msg->points[i].x;
-                cloud_full_[i].y = msg->points[i].y;
-                cloud_full_[i].z = msg->points[i].z;
-                cloud_full_[i].intensity = msg->points[i].reflectivity;
+    cloud_out_.reserve(plsize);
+    const int filter_step = std::max(1, point_filter_num_);
+    const double blind_sq = blind_ * blind_;
 
-                // use curvature as time of each laser points, curvature unit: ms
-                cloud_full_[i].time = msg->points[i].offset_time / double(1000000);
-
-                if ((abs(cloud_full_[i].x - cloud_full_[i - 1].x) > 1e-7) ||
-                    (abs(cloud_full_[i].y - cloud_full_[i - 1].y) > 1e-7) ||
-                    (abs(cloud_full_[i].z - cloud_full_[i - 1].z) > 1e-7) &&
-                        (cloud_full_[i].x * cloud_full_[i].x + cloud_full_[i].y * cloud_full_[i].y +
-                             cloud_full_[i].z * cloud_full_[i].z >
-                         (blind_ * blind_))) {
-                    is_valid_pt[i] = true;
-                }
-            }
+    for (int i = 1; i < plsize; ++i) {
+        const auto &pt = msg->points[i];
+        if (pt.line >= num_scans_) {
+            continue;
         }
-    });
-
-    for (uint i = 1; i < plsize; i++) {
-        if (is_valid_pt[i]) {
-            cloud_out_.points.push_back(cloud_full_[i]);
+        if (!((pt.tag & 0x30) == 0x10 || (pt.tag & 0x30) == 0x00)) {
+            continue;
         }
+        if (i % filter_step != 0) {
+            continue;
+        }
+
+        const double range_sq = static_cast<double>(pt.x) * static_cast<double>(pt.x) +
+                                static_cast<double>(pt.y) * static_cast<double>(pt.y) +
+                                static_cast<double>(pt.z) * static_cast<double>(pt.z);
+        if (range_sq <= blind_sq) {
+            continue;
+        }
+
+        const auto &prev_pt = msg->points[i - 1];
+        if (std::fabs(pt.x - prev_pt.x) <= 1e-7 && std::fabs(pt.y - prev_pt.y) <= 1e-7 &&
+            std::fabs(pt.z - prev_pt.z) <= 1e-7) {
+            continue;
+        }
+
+        if (pt.z < height_min_ || pt.z > height_max_) {
+            continue;
+        }
+
+        PointType added_pt;
+        added_pt.x = pt.x;
+        added_pt.y = pt.y;
+        added_pt.z = pt.z;
+        added_pt.intensity = pt.reflectivity;
+        // use curvature as time of each laser points, curvature unit: ms
+        added_pt.time = pt.offset_time / double(1000000);
+        cloud_out_.points.push_back(added_pt);
     }
 
     cloud_out_.width = cloud_out_.size();
@@ -107,6 +118,10 @@ void PointCloudPreprocess::Oust64Handler(const sensor_msgs::PointCloud2::ConstPt
             continue;
         }
 
+        if (pl_orig.points[i].z < height_min_ || pl_orig.points[i].z > height_max_) {
+            continue;
+        }
+
         PointType added_pt;
         added_pt.x = pl_orig.points[i].x;
         added_pt.y = pl_orig.points[i].y;
@@ -114,6 +129,48 @@ void PointCloudPreprocess::Oust64Handler(const sensor_msgs::PointCloud2::ConstPt
         added_pt.intensity = pl_orig.points[i].intensity;
         added_pt.time = pl_orig.points[i].t / 1e6;  // curvature unit: ms
 
+        cloud_out_.points.push_back(added_pt);
+    }
+
+    cloud_out_.width = cloud_out_.size();
+    cloud_out_.height = 1;
+    cloud_out_.is_dense = false;
+}
+
+void PointCloudPreprocess::RoboSenseHandler(const sensor_msgs::PointCloud2::ConstPtr &msg) {
+    cloud_out_.clear();
+    cloud_full_.clear();
+
+    pcl::PointCloud<PointRobotSense> pl_orig;
+    pcl::fromROSMsg(*msg, pl_orig);
+    const int plsize = static_cast<int>(pl_orig.size());
+    cloud_out_.reserve(plsize);
+
+    const double head_time = msg->header.stamp.sec + msg->header.stamp.nsec / 1e9;
+
+    for (int i = 0; i < plsize; ++i) {
+        if (i % point_filter_num_ != 0) {
+            continue;
+        }
+
+        const auto &src = pl_orig.points[i];
+        const double range_sq = static_cast<double>(src.x) * static_cast<double>(src.x) +
+                                static_cast<double>(src.y) * static_cast<double>(src.y) +
+                                static_cast<double>(src.z) * static_cast<double>(src.z);
+        if (range_sq <= blind_ * blind_) {
+            continue;
+        }
+
+        if (src.z < height_min_ || src.z > height_max_) {
+            continue;
+        }
+
+        PointType added_pt;
+        added_pt.x = src.x;
+        added_pt.y = src.y;
+        added_pt.z = src.z;
+        added_pt.intensity = src.intensity;
+        added_pt.time = (src.timestamp - head_time) * 1e3;
         cloud_out_.points.push_back(added_pt);
     }
 
@@ -193,6 +250,9 @@ void PointCloudPreprocess::VelodyneHandler(const sensor_msgs::PointCloud2::Const
 
         if (i % point_filter_num_ == 0) {
             if (added_pt.x * added_pt.x + added_pt.y * added_pt.y + added_pt.z * added_pt.z > (blind_ * blind_)) {
+                if (added_pt.z < height_min_ || added_pt.z > height_max_) {
+                    continue;
+                }
                 cloud_out_.points.push_back(added_pt);
             }
         }
@@ -243,6 +303,10 @@ void PointCloudPreprocess::MergedCloudHandler(const sensor_msgs::PointCloud2::Co
                                 static_cast<double>(added_pt.y) * static_cast<double>(added_pt.y) +
                                 static_cast<double>(added_pt.z) * static_cast<double>(added_pt.z);
         if (range_sq <= blind_ * blind_) {
+            continue;
+        }
+
+        if (added_pt.z < height_min_ || added_pt.z > height_max_) {
             continue;
         }
 

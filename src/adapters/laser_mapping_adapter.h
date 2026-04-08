@@ -20,6 +20,7 @@ class LaserMappingAdapter : public IMotionEstimator {
     NavState GetDeadReckoningState() const override;
     Keyframe::Ptr GetKeyframe() const override;
     CloudPtr GetUndistortedScan() const override;
+    CloudPtr GetProjectedCloud() const override;
 
    private:
     std::shared_ptr<LaserMapping> impl_ = nullptr;

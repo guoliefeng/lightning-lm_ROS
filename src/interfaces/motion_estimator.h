@@ -19,6 +19,7 @@ class IMotionEstimator {
     virtual NavState GetDeadReckoningState() const = 0;
     virtual Keyframe::Ptr GetKeyframe() const = 0;
     virtual CloudPtr GetUndistortedScan() const = 0;
+    virtual CloudPtr GetProjectedCloud() const = 0;
 };
 
 }  // namespace lightning::loc

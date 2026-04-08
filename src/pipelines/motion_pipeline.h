@@ -15,6 +15,7 @@ class MotionPipeline : public ISensorPipeline {
         bool online_mode_ = false;
         bool enable_lidar_odom_skip_ = false;
         int lidar_odom_skip_num_ = 1;
+        bool loc_on_kf_ = false;
     };
 
     MotionPipeline(Options options, std::shared_ptr<IMotionEstimator> motion_estimator,

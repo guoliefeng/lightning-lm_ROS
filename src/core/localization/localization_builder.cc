@@ -33,6 +33,7 @@ LocalizationComponents LocalizationBuilder::BuildLocalizationComponents(const st
     int lidar_type = yaml.GetValue<int>("fasterlio", "lidar_type");
     preprocess->NumScans() = yaml.GetValue<int>("fasterlio", "scan_line");
     preprocess->PointFilterNum() = yaml.GetValue<int>("fasterlio", "point_filter_num");
+    preprocess->SetHeightROI(yaml.GetValue<float>("roi", "height_max"), yaml.GetValue<float>("roi", "height_min"));
 
     LOG(INFO) << "lidar_type " << lidar_type;
     if (lidar_type == 1) {
@@ -44,6 +45,9 @@ LocalizationComponents LocalizationBuilder::BuildLocalizationComponents(const st
     } else if (lidar_type == 3) {
         preprocess->SetLidarType(LidarType::OUST64);
         LOG(INFO) << "Using OUST 64 Lidar";
+    } else if (lidar_type == 4) {
+        preprocess->SetLidarType(LidarType::ROBOSENSE);
+        LOG(INFO) << "Using RoboSense Lidar";
     } else if (lidar_type == 6) {
         preprocess->SetLidarType(LidarType::MERGED);
         LOG(INFO) << "Using merged PointCloud2 (meta_cloud)";
@@ -55,6 +59,7 @@ LocalizationComponents LocalizationBuilder::BuildLocalizationComponents(const st
     motion_pipeline_options.online_mode_ = online_mode;
     motion_pipeline_options.enable_lidar_odom_skip_ = yaml.GetValue<bool>("system", "enable_lidar_odom_skip");
     motion_pipeline_options.lidar_odom_skip_num_ = yaml.GetValue<int>("system", "lidar_odom_skip_num");
+    motion_pipeline_options.loc_on_kf_ = yaml.GetValue<bool>("lidar_loc", "loc_on_kf");
     components.sensor_pipeline =
         std::make_shared<MotionPipeline>(motion_pipeline_options, components.motion_estimator, preprocess);
 

@@ -85,15 +85,23 @@ void MotionPipeline::HandleCloud(CloudPtr cloud) {
         lidar_odom_callback_(lo_state);
     }
 
-    auto kf = motion_estimator_->GetKeyframe();
-    if (kf == last_keyframe_) {
-        return;
-    }
-
-    last_keyframe_ = kf;
-
     if (keyframe_scan_callback_) {
-        keyframe_scan_callback_(motion_estimator_->GetUndistortedScan());
+        auto scan = motion_estimator_->GetProjectedCloud();
+        if (scan == nullptr) {
+            scan = motion_estimator_->GetUndistortedScan();
+        }
+
+        if (options_.loc_on_kf_) {
+            auto kf = motion_estimator_->GetKeyframe();
+            if (kf == last_keyframe_) {
+                return;
+            }
+            last_keyframe_ = kf;
+        } else {
+            last_keyframe_ = motion_estimator_->GetKeyframe();
+        }
+
+        keyframe_scan_callback_(scan);
     }
 }
 

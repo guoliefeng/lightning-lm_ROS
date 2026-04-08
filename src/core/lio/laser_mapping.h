@@ -1,8 +1,9 @@
 #ifndef FASTER_LIO_LASER_MAPPING_H
 #define FASTER_LIO_LASER_MAPPING_H
 
-#include <pcl/filters/voxel_grid.h>
 #include <condition_variable>
+#include <list>
+#include <pcl/filters/voxel_grid.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <thread>
 
@@ -23,21 +24,29 @@ namespace ui {
 class PangolinWindow;
 }
 
-/**
- * laser mapping
- * 目前有个问题：点云在缓存之后，实际处理的并不是最新的那个点云（通常是buffer里的前一个），这是因为bag里的点云用的开始时间戳，导致
- * 点云的结束时间要比IMU多0.1s左右。为了同步最近的IMU，就只能处理缓冲队列里的那个点云，而不是最新的点云
- */
 class LaserMapping {
    public:
     struct Options {
-        Options() {}
+        Options()
+            : is_in_slam_mode_(true),
+              enable_icp_part_(true),
+              plane_icp_weight_(1.0),
+              icp_weight_(100.0),
+              min_pts(300),
+              kf_dis_th_(2.0),
+              kf_angle_th_(15 * M_PI / 180.0),
+              proj_kfs_(false),
+              max_proj_kfs_(5) {}
 
-        bool is_in_slam_mode_ = true;  // 是否在slam模式下
-
-        /// 关键帧阈值
-        double kf_dis_th_ = 2.0;
-        double kf_angle_th_ = 15 * M_PI / 180.0;
+        bool is_in_slam_mode_;
+        bool enable_icp_part_;
+        double plane_icp_weight_;
+        double icp_weight_;
+        int min_pts;
+        double kf_dis_th_;
+        double kf_angle_th_;
+        bool proj_kfs_;
+        int max_proj_kfs_;
     };
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -52,35 +61,22 @@ class LaserMapping {
         LOG(INFO) << "laser mapping deconstruct";
     }
 
-    /// init without ros
-    bool Init(const std::string &config_yaml);
-
+    bool Init(const std::string& config_yaml);
     bool Run();
 
-    // callbacks of lidar and imu
-    /// 处理ROS1的点云
-    void ProcessPointCloud2(const sensor_msgs::PointCloud2::ConstPtr &msg);
-
-    /// 处理livox的点云
-    void ProcessPointCloud2(const livox_ros_driver::CustomMsg::ConstPtr &msg);
-
-    /// 如果已经做了预处理，也可以直接处理点云
+    void ProcessPointCloud2(const sensor_msgs::PointCloud2::ConstPtr& msg);
+    void ProcessPointCloud2(const livox_ros_driver::CustomMsg::ConstPtr& msg);
     void ProcessPointCloud2(CloudPtr cloud);
 
-    void ProcessIMU(const lightning::IMUPtr &msg_in);
+    void ProcessIMU(const lightning::IMUPtr& msg_in);
 
-    /// 保存前端的地图
     void SaveMap();
 
     void SetUI(std::shared_ptr<ui::PangolinWindow> ui) { ui_ = ui; }
 
-    /// 获取关键帧
     Keyframe::Ptr GetKeyframe() const { return last_kf_; }
-
-    /// 获取激光的状态
     NavState GetState() const { return state_point_; }
 
-    /// 获取IMU状态
     NavState GetIMUState() const {
         if (p_imu_->IsIMUInited()) {
             return kf_imu_.GetX();
@@ -92,28 +88,19 @@ class LaserMapping {
     }
 
     CloudPtr GetScanUndist() const { return scan_undistort_; }
-
-    /// 获取最新的点云
+    CloudPtr GetProjCloud();
     CloudPtr GetRecentCloud();
 
     std::vector<Keyframe::Ptr> GetAllKeyframes() { return all_keyframes_; }
-
-    /**
-     * 计算全局地图
-     * @param use_lio_pose
-     * @return
-     */
     CloudPtr GetGlobalMap(bool use_lio_pose, bool use_voxel = true, float res = 0.1);
 
    private:
-    // sync lidar with imu
     bool SyncPackages();
+    void ObsModel(NavState& s, ESKF::CustomObservationModel& obs);
 
-    void ObsModel(NavState &s, ESKF::CustomObservationModel &obs);
-
-    inline void PointBodyToWorld(const PointType &pi, PointType &po) {
-        Vec3d p_global(state_point_.rot_ * (state_point_.offset_R_lidar_ * pi.getVector3fMap().cast<double>() +
-                                            state_point_.offset_t_lidar_) +
+    inline void PointBodyToWorld(const PointType& pi, PointType& po) {
+        Vec3d p_global(state_point_.rot_ *
+                           (offset_R_lidar_fixed_ * pi.getVector3fMap().cast<double>() + offset_t_lidar_fixed_) +
                        state_point_.pos_);
 
         po.x = p_global(0);
@@ -123,45 +110,43 @@ class LaserMapping {
     }
 
     void MapIncremental();
-
-    bool LoadParamsFromYAML(const std::string &yaml);
-
-    /// 创建关键帧
+    bool LoadParamsFromYAML(const std::string& yaml);
     void MakeKF();
+    void ProjectKFs(CloudPtr cloud, int size_limit = 1000);
 
    private:
     Options options_;
 
-    /// modules
     IVoxType::Options ivox_options_;
-    std::shared_ptr<IVoxType> ivox_ = nullptr;                    // localmap in ivox
-    std::shared_ptr<PointCloudPreprocess> preprocess_ = nullptr;  // point cloud preprocess
-    std::shared_ptr<ImuProcess> p_imu_ = nullptr;                 // imu process
+    std::shared_ptr<IVoxType> ivox_ = nullptr;
+    std::shared_ptr<PointCloudPreprocess> preprocess_ = nullptr;
+    std::shared_ptr<ImuProcess> p_imu_ = nullptr;
 
-    /// local map related
     double filter_size_map_min_ = 0;
 
-    /// params
-    std::vector<double> extrinT_{3, 0.0};  // lidar-imu translation
-    std::vector<double> extrinR_{9, 0.0};  // lidar-imu rotation
+    std::vector<double> extrinT_{3, 0.0};
+    std::vector<double> extrinR_{9, 0.0};
+    Mat3d offset_R_lidar_fixed_ = Mat3d::Identity();
+    Vec3d offset_t_lidar_fixed_ = Vec3d::Zero();
     std::string map_file_path_;
 
     std::vector<Keyframe::Ptr> all_keyframes_;
     Keyframe::Ptr last_kf_ = nullptr;
     int kf_id_ = 0;
 
-    /// point clouds data
-    CloudPtr scan_undistort_{new PointCloudType()};   // scan after undistortion
-    CloudPtr scan_down_body_{new PointCloudType()};   // downsampled scan in body
-    CloudPtr scan_down_world_{new PointCloudType()};  // downsampled scan in world
-    std::vector<PointVector> nearest_points_;         // nearest points of current scan
-    std::vector<Vec4f> corr_pts_;                     // inlier pts
-    std::vector<Vec4f> corr_norm_;                    // inlier plane norms
-    pcl::VoxelGrid<PointType> voxel_scan_;            // voxel filter for current scan
+    CloudPtr scan_undistort_{new PointCloudType()};
+    CloudPtr scan_down_body_{new PointCloudType()};
+    CloudPtr scan_down_world_{new PointCloudType()};
+    pcl::VoxelGrid<PointType> voxel_scan_;
 
-    std::vector<float> residuals_;           // point-to-plane residuals
-    std::vector<bool> point_selected_surf_;  // selected points
-    std::vector<Vec4f> plane_coef_;          // plane coeffs
+    std::vector<PointVector> nearest_points_;
+    std::vector<Vec4f> corr_pts_;
+    std::vector<Vec4f> corr_norm_;
+    std::vector<float> residuals_;
+    std::vector<char> point_selected_surf_;
+    std::vector<Vec4f> plane_coef_;
+
+    std::vector<char> point_selected_icp_;
 
     std::mutex mtx_buffer_;
     std::deque<double> time_buffer_;
@@ -169,8 +154,7 @@ class LaserMapping {
     std::deque<PointCloudType::Ptr> lidar_buffer_;
     std::deque<lightning::IMUPtr> imu_buffer_;
 
-    /// options
-    bool keep_first_imu_estimation_ = false;    // 在没有建立地图前，是否要使用前几帧的IMU状态
+    bool keep_first_imu_estimation_ = false;
     double timediff_lidar_wrt_imu_ = 0.0;
     double last_timestamp_lidar_ = 0;
     double lidar_end_time_ = 0;
@@ -178,33 +162,30 @@ class LaserMapping {
     double first_lidar_time_ = 0.0;
     bool lidar_pushed_ = false;
 
-    bool enable_skip_lidar_ = true;  // 雷达是否需要跳帧
-    int skip_lidar_num_ = 5;         // 每隔多少帧跳一个雷达
+    bool enable_skip_lidar_ = true;
+    int skip_lidar_num_ = 5;
     int skip_lidar_cnt_ = 0;
 
-    /// statistics and flags ///
     int scan_count_ = 0;
     int publish_count_ = 0;
     bool flg_first_scan_ = true;
     bool flg_EKF_inited_ = false;
     double lidar_mean_scantime_ = 0.0;
     int scan_num_ = 0;
-    int effect_feat_num_ = 0, frame_num_ = 0;
+    int effect_feat_surf_ = 0, frame_num_ = 0, effect_feat_icp_ = 0;
 
     double last_lidar_time_ = 0;
 
-    ///////////////////////// EKF inputs and output ///////////////////////////////////////////////////////
-    MeasureGroup measures_;  // sync IMU and lidar scan
+    MeasureGroup measures_;
 
-    ESKF kf_;      // 点云时刻的IMU状态
-    ESKF kf_imu_;  // imu 最新时刻的eskf状态
+    ESKF kf_;
+    ESKF kf_imu_;
 
-    NavState state_point_;  // ekf current state
+    NavState state_point_;
 
-    Vec3d pos_lidar_;  // lidar position after eskf update
-    SO3 euler_cur_;    // rotation in euler angles
-    bool extrinsic_est_en_ = true;
-    bool use_aa_ = false;  // use anderson acceleration?
+    bool use_aa_ = false;
+
+    std::list<Keyframe::Ptr> proj_kfs_;
 
     std::shared_ptr<ui::PangolinWindow> ui_ = nullptr;
 };
