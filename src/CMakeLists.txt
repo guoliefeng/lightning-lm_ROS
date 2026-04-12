@@ -28,6 +28,8 @@ add_library(${PROJECT_NAME}.libs SHARED
         adapters/lidar_loc_adapter.cc
         adapters/pgo_adapter.cc
 
+        plugins/registry/default_plugin_registry.cc
+
         core/localization/localization_result.cc
         core/localization/lidar_loc/lidar_loc.cc
         core/localization/lidar_loc/pclomp/ndt_omp.cpp
@@ -39,6 +41,7 @@ add_library(${PROJECT_NAME}.libs SHARED
         core/localization/localization_builder.cc
         core/localization/localization_runtime_factory.cc
         core/localization/localization.cpp
+        application/system/system_assembler.cc
         pipelines/motion_pipeline.cc
 
         utils/timer.cc
