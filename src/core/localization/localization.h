@@ -7,16 +7,18 @@
 #include "common/sensor_cloud_input.h"
 #include "common/std_types.h"
 #include "core/localization/localization_result.h"
-#include "core/system/async_message_process.h"
-#include "interfaces/fusion_engine.h"
-#include "interfaces/localizer.h"
+#include "domain/contracts/trajectory_manager.h"
+#include "domain/contracts/trajectory_context.h"
 #include "interfaces/localization_runtime.h"
-#include "interfaces/sensor_pipeline.h"
 
 /// 预声明
 namespace lightning {
 namespace ui {
 class PangolinWindow;
+}
+
+namespace application::trajectory {
+class TrajectoryContextImpl;
 }
 
 namespace loc {
@@ -77,9 +79,6 @@ class Localization : public ILocalizationRuntime {
 
     /// TODO: 处理odom消息
 
-    /// 异步处理函数
-    void LidarLocProcCloud(CloudPtr);
-
     // void SetPathCallback(std::function<void(const nav_msgs::msg::Path& path)>&& callback);
     // void SetPointcloudWorldCallback(std::function<void(const sensor_msgs::msg::PointCloud2& pointcloud)>&& callback);
     // void SetPointcloudBodyCallback(std::function<void(const sensor_msgs::msg::PointCloud2& pointcloud)>&& callback);
@@ -92,16 +91,9 @@ class Localization : public ILocalizationRuntime {
 
     // ui
     std::shared_ptr<ui::PangolinWindow> ui_ = nullptr;
-
-    // pose graph
-    std::shared_ptr<IFusionEngine> fusion_engine_ = nullptr;
-
-    // lidar localization
-    std::shared_ptr<ILocalizer> localizer_;
-    std::shared_ptr<ISensorPipeline> sensor_pipeline_ = nullptr;
-
-    /// TODO async 处理
-    sys::AsyncMessageProcess<CloudPtr> lidar_loc_proc_cloud_;   // lidar loc 处理点云
+    std::shared_ptr<domain::contracts::ITrajectoryManager> trajectory_manager_ = nullptr;
+    std::shared_ptr<domain::contracts::ITrajectoryContext> trajectory_ = nullptr;
+    std::shared_ptr<application::trajectory::TrajectoryContextImpl> trajectory_impl_ = nullptr;
 
     /// 结果数据 =====================================================================================================
     LocalizationResult loc_result_;
