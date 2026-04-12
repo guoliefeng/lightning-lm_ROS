@@ -1,5 +1,9 @@
 #pragma once
 
+// Legacy compatibility interface for current ROS1 runtime wiring.
+// New stable contracts should depend on domain/contracts/system_root.h,
+// domain/contracts/trajectory_context.h and domain/contracts/event_sink.h.
+
 #include <functional>
 #include <string>
 
@@ -9,6 +13,9 @@
 #include "common/eigen_types.h"
 #include "common/imu.h"
 #include "common/sensor_cloud_input.h"
+#include "domain/contracts/event_sink.h"
+#include "domain/contracts/system_root.h"
+#include "domain/contracts/trajectory_context.h"
 
 namespace lightning::loc {
 

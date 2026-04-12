@@ -1,11 +1,15 @@
 #pragma once
 
+// Legacy compatibility interface sitting above preprocessing / motion estimation.
+// Input ordering and dispatch should migrate toward domain/contracts/sensor_collator.h.
+
 #include <functional>
 
 #include "common/imu.h"
 #include "common/nav_state.h"
 #include "common/point_def.h"
 #include "common/sensor_cloud_input.h"
+#include "domain/contracts/sensor_collator.h"
 
 namespace lightning::loc {
 

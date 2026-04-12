@@ -1,9 +1,15 @@
 #pragma once
 
+// Legacy compatibility interface.
+// New stable contracts should depend on domain/contracts/state_estimator.h
+// and domain/contracts/pose_graph_backend.h instead of this composite facade.
+
 #include <functional>
 
 #include "common/nav_state.h"
 #include "core/localization/localization_result.h"
+#include "domain/contracts/pose_graph_backend.h"
+#include "domain/contracts/state_estimator.h"
 
 namespace lightning::loc {
 

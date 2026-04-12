@@ -1,11 +1,16 @@
 #pragma once
 
+// Legacy compatibility interface.
+// This file may still expose UI-specific hooks for existing code paths.
+// New stable contracts must not depend on it.
+
 #include <memory>
 #include <string>
 
 #include "common/nav_state.h"
 #include "common/point_def.h"
 #include "core/localization/localization_result.h"
+#include "domain/contracts/event_sink.h"
 
 namespace lightning::ui {
 class PangolinWindow;
@@ -17,6 +22,7 @@ class ILocalizer {
    public:
     virtual ~ILocalizer() = default;
 
+    // TODO(refactor): remove UI hook after event-based propagation is in place.
     virtual bool Init(const std::string& yaml_path) = 0;
     virtual void FeedLidarOdom(const NavState& state) = 0;
     virtual void FeedDeadReckoning(const NavState& state) = 0;

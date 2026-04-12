@@ -1,9 +1,14 @@
 #pragma once
 
+// Legacy compatibility interface for current localization builder / adapters.
+// New stable contracts should exchange domain/result/motion_estimate.h values
+// rather than depending on this algorithm-facing boundary.
+
 #include <string>
 
 #include "common/imu.h"
 #include "common/keyframe.h"
+#include "domain/result/motion_estimate.h"
 
 namespace lightning::loc {
 
