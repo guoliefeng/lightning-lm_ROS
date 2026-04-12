@@ -4,18 +4,17 @@
 #include <mutex>
 #include <string>
 
-#include "application/system/system_assembler.h"
-#include "common/eigen_types.h"
-#include "common/imu.h"
-#include "common/point_def.h"
-#include "common/sensor_cloud_input.h"
-#include "common/std_types.h"
-#include "core/system/async_message_process.h"
-#include "domain/contracts/event_sink.h"
+#include "domain/contracts/localizer.h"
+#include "domain/contracts/motion_estimator.h"
+#include "domain/contracts/pose_graph_backend.h"
+#include "domain/contracts/sensor_collator.h"
+#include "domain/contracts/sensor_pipeline.h"
+#include "domain/contracts/state_estimator.h"
 #include "domain/contracts/trajectory_context.h"
-#include "domain/result/localization_result.h"
-#include "domain/result/state_estimate.h"
-#include "interfaces/fusion_engine.h"
+
+namespace lightning::application::system {
+struct LocalizationAssembly;
+}
 
 namespace lightning::application::trajectory {
 
@@ -41,19 +40,14 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
     domain::result::StateEstimate GetLatestStateEstimate() const override;
     domain::result::LocalizationResult GetLatestLocalizationResult() const override;
 
-    void FeedLegacyImu(const IMUPtr& imu);
-    void FeedLegacyCloud(const SensorCloudInput& cloud);
-    void SetInitialPose(const SE3& pose);
+    void SetInitialPose(const domain::geometry::Pose3& pose);
 
    private:
     void WireTrajectoryFlow();
     void ConfigureLocalizationWorker();
-    void HandleCollatedImu(const domain::sensor::ImuData& imu);
-    void HandleCollatedCloud(const domain::sensor::CloudData& cloud);
-    void HandleDeadReckoning(const NavState& state);
-    void HandleLidarOdometry(const NavState& state);
-    void HandleKeyframeCloud(const CloudPtr& cloud);
-    void ProcessLocalizationCloud(const CloudPtr& cloud);
+
+    struct LegacyRuntimeResources;
+    std::unique_ptr<LegacyRuntimeResources> legacy_;
 
     Options options_;
     std::shared_ptr<domain::contracts::ISensorCollator> sensor_collator_ = nullptr;
@@ -64,15 +58,11 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
     std::shared_ptr<domain::contracts::IPoseGraphBackend> pose_graph_backend_ = nullptr;
     std::shared_ptr<domain::contracts::IEventSink> event_sink_ = nullptr;
 
-    std::shared_ptr<loc::IFusionEngine> legacy_fusion_engine_ = nullptr;
-
     mutable std::mutex mutex_;
     bool initialized_ = false;
     bool started_ = false;
     bool enable_lidar_loc_skip_ = true;
     int lidar_loc_skip_num_ = 1;
-
-    sys::AsyncMessageProcess<CloudPtr> localization_proc_cloud_;
 
     domain::result::StateEstimate latest_state_estimate_;
     domain::result::LocalizationResult latest_localization_result_;

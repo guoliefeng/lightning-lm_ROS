@@ -2,6 +2,7 @@
 
 #include "application/system/system_assembler.h"
 #include "application/trajectory/trajectory_context_impl.h"
+#include "application/trajectory/trajectory_legacy_conversion.h"
 #include "application/trajectory/trajectory_manager_impl.h"
 #include "core/lightning_math.hpp"
 #include "interfaces/localizer.h"
@@ -102,6 +103,8 @@ class LocalizationRuntimeEventSink : public domain::contracts::IEventSink {
 
 Localization::Localization(Options options) { options_ = options; }
 
+Localization::~Localization() = default;
+
 bool Localization::Init(const std::string& yaml_path, const std::string& global_map_path) {
     UL lock(global_mutex_);
     if (trajectory_ != nullptr || trajectory_manager_ != nullptr) {
@@ -110,6 +113,10 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
 
     YAML_IO yaml(yaml_path);
     options_.with_ui_ = yaml.GetValue<bool>("system", "with_ui");
+    cloud_converter_ = std::make_unique<application::trajectory::legacy::LegacyCloudConverter>(yaml_path);
+    if (!cloud_converter_->IsValid()) {
+        return false;
+    }
 
     if (options_.with_ui_) {
         ui_ = std::make_shared<ui::PangolinWindow>();
@@ -195,7 +202,11 @@ void Localization::ProcessCloud(const SensorCloudInput& cloud) {
     }
     last_cloud_time_ = this_cloud_time;
 
-    trajectory_impl_->FeedLegacyCloud(cloud);
+    auto domain_cloud = cloud_converter_->ToDomainCloud(cloud);
+    if (domain_cloud.points.empty()) {
+        return;
+    }
+    trajectory_->FeedCloud(domain_cloud);
 }
 
 void Localization::ProcessIMUMsg(IMUPtr imu) {
@@ -210,7 +221,7 @@ void Localization::ProcessIMUMsg(IMUPtr imu) {
     }
     last_imu_time_ = this_imu_time;
 
-    trajectory_impl_->FeedLegacyImu(imu);
+    trajectory_->FeedImu(application::trajectory::legacy::ToDomainImu(imu));
 }
 
 void Localization::Finish() {
@@ -223,6 +234,7 @@ void Localization::Finish() {
     trajectory_impl_.reset();
     trajectory_.reset();
     trajectory_manager_.reset();
+    cloud_converter_.reset();
 
     if (ui_) {
         ui_->Quit();
@@ -238,7 +250,10 @@ void Localization::Finish() {
 void Localization::SetExternalPose(const Eigen::Quaterniond& q, const Eigen::Vector3d& t) {
     UL lock(global_mutex_);
     if (trajectory_impl_) {
-        trajectory_impl_->SetInitialPose(SE3(q, t));
+        domain::geometry::Pose3 pose;
+        pose.translation = t;
+        pose.rotation = q;
+        trajectory_impl_->SetInitialPose(pose);
     }
 }
 

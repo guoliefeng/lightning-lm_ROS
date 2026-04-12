@@ -19,6 +19,9 @@ class PangolinWindow;
 
 namespace application::trajectory {
 class TrajectoryContextImpl;
+namespace legacy {
+class LegacyCloudConverter;
+}
 }
 
 namespace loc {
@@ -46,7 +49,7 @@ class Localization : public ILocalizationRuntime {
     };
 
     Localization(Options options = Options());
-    ~Localization() = default;
+    ~Localization() override;
 
     using TFCallback = ILocalizationRuntime::TFCallback;
     using LocStateCallback = ILocalizationRuntime::LocStateCallback;
@@ -94,6 +97,7 @@ class Localization : public ILocalizationRuntime {
     std::shared_ptr<domain::contracts::ITrajectoryManager> trajectory_manager_ = nullptr;
     std::shared_ptr<domain::contracts::ITrajectoryContext> trajectory_ = nullptr;
     std::shared_ptr<application::trajectory::TrajectoryContextImpl> trajectory_impl_ = nullptr;
+    std::unique_ptr<application::trajectory::legacy::LegacyCloudConverter> cloud_converter_;
 
     /// 结果数据 =====================================================================================================
     LocalizationResult loc_result_;
