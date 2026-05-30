@@ -6,22 +6,13 @@
 #include "common/imu.h"
 #include "common/sensor_cloud_input.h"
 #include "common/std_types.h"
-#include "core/localization/localization_result.h"
-#include "domain/contracts/trajectory_manager.h"
-#include "domain/contracts/trajectory_context.h"
 #include "interfaces/localization_runtime.h"
 
 /// 预声明
 namespace lightning {
-namespace ui {
-class PangolinWindow;
-}
-
-namespace application::trajectory {
-class TrajectoryContextImpl;
-namespace legacy {
-class LegacyCloudConverter;
-}
+namespace application::system {
+class LegacyRuntimeBridge;
+class SystemRootImpl;
 }
 
 namespace loc {
@@ -92,24 +83,12 @@ class Localization : public ILocalizationRuntime {
     std::mutex global_mutex_;  // 防止处理过程中被重复init
     Options options_;
 
-    // ui
-    std::shared_ptr<ui::PangolinWindow> ui_ = nullptr;
-    std::shared_ptr<domain::contracts::ITrajectoryManager> trajectory_manager_ = nullptr;
-    std::shared_ptr<domain::contracts::ITrajectoryContext> trajectory_ = nullptr;
-    std::shared_ptr<application::trajectory::TrajectoryContextImpl> trajectory_impl_ = nullptr;
-    std::unique_ptr<application::trajectory::legacy::LegacyCloudConverter> cloud_converter_;
-
-    /// 结果数据 =====================================================================================================
-    LocalizationResult loc_result_;
+    std::shared_ptr<application::system::SystemRootImpl> system_root_ = nullptr;
+    std::unique_ptr<application::system::LegacyRuntimeBridge> legacy_bridge_;
 
     /// 框架相关
     TFCallback tf_callback_;
     LocStateCallback loc_state_callback_;
-
-    /// 输入检查
-    double last_imu_time_ = 0;
-    double last_odom_time_ = 0;
-    double last_cloud_time_ = 0;
 };
 }  // namespace loc
 

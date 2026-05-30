@@ -42,6 +42,8 @@ add_library(${PROJECT_NAME}.libs SHARED
         core/localization/localization_runtime_factory.cc
         core/localization/localization.cpp
         application/system/system_assembler.cc
+        application/system/system_root_impl.cc
+        application/system/legacy_runtime_bridge.cc
         application/trajectory/trajectory_legacy_conversion.cc
         application/trajectory/trajectory_context_impl.cc
         application/trajectory/trajectory_manager_impl.cc
