@@ -4,15 +4,12 @@
 
 #include <glog/logging.h>
 
-#include "application/system/localization_assembly_hook_host.h"
-#include "application/system/system_assembler.h"
 #include "application/trajectory/trajectory_legacy_conversion.h"
 #include "domain/contracts/event_sink.h"
 #include "domain/contracts/system_root.h"
 #include "domain/result/map_state.h"
 #include "domain/result/motion_estimate.h"
 #include "domain/result/state_estimate.h"
-#include "interfaces/localizer.h"
 #include "io/yaml_io.h"
 #include "ui/pangolin_window.h"
 
@@ -73,7 +70,11 @@ class LegacyRuntimeBridge::BridgeEventSink : public domain::contracts::IEventSin
 
     void OnMapState(const domain::result::MapState&) override {}
 
-    void OnCloudInWorld(const domain::sensor::CloudData&, const domain::geometry::Pose3&) override {}
+    void OnCloudInWorld(const domain::sensor::CloudData& cloud, const domain::geometry::Pose3& pose) override {
+        if (bridge_) {
+            bridge_->HandleCloudInWorld(cloud, pose);
+        }
+    }
 
    private:
     LegacyRuntimeBridge* bridge_ = nullptr;
@@ -121,17 +122,6 @@ bool LegacyRuntimeBridge::Init(const std::string& yaml_path) {
         ui_->Init();
     }
 
-    auto hook_host = std::dynamic_pointer_cast<ILocalizationAssemblyHookHost>(system_root_);
-    if (hook_host) {
-        hook_host->SetTrajectoryAssemblyHook([ui = ui_](const std::string&, LocalizationAssembly& assembly) {
-            if (ui && assembly.localizer) {
-                assembly.localizer->SetUI(ui);
-            }
-        });
-    } else if (ui_) {
-        LOG(WARNING) << "system root does not support localization assembly hook; localizer UI hook skipped";
-    }
-
     CreateEventSink();
     if (!system_root_->Init(yaml_path)) {
         return false;
@@ -148,9 +138,6 @@ bool LegacyRuntimeBridge::Init(const std::string& yaml_path) {
 void LegacyRuntimeBridge::Finish() {
     if (system_root_) {
         system_root_->Shutdown();
-        if (auto hook_host = std::dynamic_pointer_cast<ILocalizationAssemblyHookHost>(system_root_)) {
-            hook_host->SetTrajectoryAssemblyHook(ILocalizationAssemblyHookHost::TrajectoryAssemblyHook());
-        }
     }
 
     event_sink_.reset();
@@ -261,5 +248,18 @@ void LegacyRuntimeBridge::HandleLocalizationResult(const domain::result::Localiz
 }
 
 void LegacyRuntimeBridge::HandleStateEstimate(const domain::result::StateEstimate&) {}
+
+void LegacyRuntimeBridge::HandleCloudInWorld(const domain::sensor::CloudData& cloud,
+                                             const domain::geometry::Pose3& pose) {
+    if (!ui_) {
+        return;
+    }
+
+    auto legacy_cloud = trajectory::legacy::ToLegacyCloud(cloud);
+    if (legacy_cloud.cloud == nullptr || legacy_cloud.cloud->empty()) {
+        return;
+    }
+    ui_->UpdateScan(legacy_cloud.cloud, SE3(pose.rotation, pose.translation));
+}
 
 }  // namespace lightning::application::system

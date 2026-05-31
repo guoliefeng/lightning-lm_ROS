@@ -1,5 +1,6 @@
 #include "application/trajectory/trajectory_context_impl.h"
 
+#include <cstdint>
 #include <utility>
 
 #include <glog/logging.h>
@@ -223,6 +224,7 @@ void TrajectoryContextImpl::WireTrajectoryFlow() {
             localizer_->ProcessKeyframeScan(cloud);
             const auto legacy_result = localizer_->GetLocalizationResult();
             const auto result = legacy::ToLocalizationResult(legacy_result);
+            PublishCloudInWorld(cloud, result);
 
             {
                 UL lock(mutex_);
@@ -295,6 +297,7 @@ void TrajectoryContextImpl::ConfigureLocalizationWorker() {
         localizer_->ProcessKeyframeScan(cloud);
         const auto legacy_result = localizer_->GetLocalizationResult();
         const auto result = legacy::ToLocalizationResult(legacy_result);
+        PublishCloudInWorld(cloud, result);
 
         {
             UL lock(mutex_);
@@ -320,6 +323,25 @@ void TrajectoryContextImpl::ConfigureLocalizationWorker() {
             }
         }
     });
+}
+
+void TrajectoryContextImpl::PublishCloudInWorld(const CloudPtr& cloud,
+                                                const domain::result::LocalizationResult& result) {
+    if (cloud == nullptr || !result.localizer_valid) {
+        return;
+    }
+
+    std::shared_ptr<domain::contracts::IEventSink> sink;
+    {
+        UL lock(mutex_);
+        sink = event_sink_;
+    }
+    if (!sink) {
+        return;
+    }
+
+    const auto stamp_ns = static_cast<std::uint64_t>(result.timestamp_s * 1e9);
+    sink->OnCloudInWorld(legacy::ToDomainCloud(cloud, stamp_ns), result.pose);
 }
 
 }  // namespace lightning::application::trajectory

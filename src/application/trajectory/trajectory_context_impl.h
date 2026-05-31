@@ -4,6 +4,7 @@
 #include <mutex>
 #include <string>
 
+#include "common/point_def.h"
 #include "domain/contracts/localizer.h"
 #include "domain/contracts/motion_estimator.h"
 #include "domain/contracts/pose_graph_backend.h"
@@ -45,6 +46,7 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
    private:
     void WireTrajectoryFlow();
     void ConfigureLocalizationWorker();
+    void PublishCloudInWorld(const CloudPtr& cloud, const domain::result::LocalizationResult& result);
 
     struct LegacyRuntimeResources;
     std::unique_ptr<LegacyRuntimeResources> legacy_;

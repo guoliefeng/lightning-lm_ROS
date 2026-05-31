@@ -1,12 +1,10 @@
 #pragma once
 
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 
-#include "application/system/localization_assembly_hook_host.h"
 #include "domain/contracts/plugin_registry.h"
 #include "domain/contracts/map_state_repository.h"
 #include "domain/contracts/system_root.h"
@@ -16,7 +14,7 @@
 
 namespace lightning::application::system {
 
-class SystemRootImpl : public domain::contracts::ISystemRoot, public ILocalizationAssemblyHookHost {
+class SystemRootImpl : public domain::contracts::ISystemRoot {
    public:
     struct Options {
         std::string config_path;
@@ -26,8 +24,6 @@ class SystemRootImpl : public domain::contracts::ISystemRoot, public ILocalizati
         bool with_ui = false;
         std::shared_ptr<domain::contracts::IPluginRegistry> plugin_registry = nullptr;
     };
-
-    using TrajectoryAssemblyHook = ILocalizationAssemblyHookHost::TrajectoryAssemblyHook;
 
     SystemRootImpl();
     explicit SystemRootImpl(Options options);
@@ -54,8 +50,6 @@ class SystemRootImpl : public domain::contracts::ISystemRoot, public ILocalizati
     bool FeedCloud(const std::string& trajectory_id, const domain::sensor::CloudData& cloud) override;
     bool SetInitialPose(const std::string& trajectory_id, const domain::geometry::Pose3& pose) override;
 
-    void SetTrajectoryAssemblyHook(TrajectoryAssemblyHook hook) override;
-
    private:
     std::shared_ptr<domain::contracts::ITrajectoryContext> FindTrajectoryLocked(const std::string& trajectory_id) const;
     std::shared_ptr<domain::contracts::ITrajectoryContext> CreateTrajectoryContext(const std::string& trajectory_id);
@@ -69,7 +63,6 @@ class SystemRootImpl : public domain::contracts::ISystemRoot, public ILocalizati
     std::shared_ptr<domain::contracts::IPluginRegistry> plugin_registry_ = nullptr;
     std::shared_ptr<domain::contracts::IMapStateRepository> map_state_repository_ = nullptr;
     std::unordered_map<std::string, std::shared_ptr<domain::contracts::IEventSink>> event_sinks_;
-    TrajectoryAssemblyHook trajectory_assembly_hook_;
 };
 
 }  // namespace lightning::application::system

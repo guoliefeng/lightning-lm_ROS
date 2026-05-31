@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -35,6 +36,7 @@ domain::result::MotionEstimate ToMotionEstimate(const NavState& state, domain::r
 domain::result::LocalizationResult ToLocalizationResult(const loc::LocalizationResult& result);
 IMUPtr ToLegacyImu(const domain::sensor::ImuData& imu);
 domain::sensor::ImuData ToDomainImu(const IMUPtr& imu);
+domain::sensor::CloudData ToDomainCloud(const CloudPtr& cloud, std::uint64_t stamp_ns);
 SensorCloudInput ToLegacyCloud(const domain::sensor::CloudData& cloud);
 
 }  // namespace lightning::application::trajectory::legacy

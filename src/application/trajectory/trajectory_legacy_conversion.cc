@@ -157,6 +157,10 @@ domain::sensor::ImuData ToDomainImu(const IMUPtr& imu) {
     return converted;
 }
 
+domain::sensor::CloudData ToDomainCloud(const CloudPtr& cloud, std::uint64_t stamp_ns) {
+    return ToDomainCloudFromPcl(cloud, stamp_ns);
+}
+
 SensorCloudInput ToLegacyCloud(const domain::sensor::CloudData& cloud) {
     SensorCloudInput converted;
     converted.stamp_ns = cloud.stamp_ns;

@@ -169,11 +169,6 @@ bool SystemRootImpl::SetInitialPose(const std::string& trajectory_id, const doma
     return true;
 }
 
-void SystemRootImpl::SetTrajectoryAssemblyHook(TrajectoryAssemblyHook hook) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    trajectory_assembly_hook_ = std::move(hook);
-}
-
 std::shared_ptr<domain::contracts::ITrajectoryContext> SystemRootImpl::FindTrajectoryLocked(
     const std::string& trajectory_id) const {
     return trajectory_manager_ ? trajectory_manager_->FindTrajectory(trajectory_id) : nullptr;
@@ -200,10 +195,6 @@ std::shared_ptr<domain::contracts::ITrajectoryContext> SystemRootImpl::CreateTra
     if (!map_state_repository_) {
         map_state_repository_ = assembly.map_state_repository;
     }
-    if (trajectory_assembly_hook_) {
-        trajectory_assembly_hook_(trajectory_id, assembly);
-    }
-
     trajectory::TrajectoryContextImpl::Options context_options;
     context_options.id = trajectory_id;
     context_options.config_path = options_.config_path;

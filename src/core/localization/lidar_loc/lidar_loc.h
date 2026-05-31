@@ -15,10 +15,6 @@
 
 #include "pclomp/ndt_omp_impl.hpp"
 
-namespace lightning::ui {
-class PangolinWindow;
-}
-
 namespace lightning::loc {
 
 /// 激光定位对外接口类
@@ -118,9 +114,6 @@ class LidarLoc {
      */
     bool Localize(SE3& pose, double& confidence, CloudPtr input, CloudPtr output, bool use_rough_res = false);
 
-    /// 设置UI
-    void SetUI(std::shared_ptr<ui::PangolinWindow> ui) { ui_ = ui; }
-
     /// 设置init pose
     void SetInitialPose(SE3 init_pose);
 
@@ -195,8 +188,7 @@ class LidarLoc {
     using ICPType = pcl::IterativeClosestPoint<PointType, PointType>;
     ICPType::Ptr pcl_icp_ = nullptr;
 
-    CloudPtr current_scan_ = nullptr;                   // 当前扫描
-    std::shared_ptr<ui::PangolinWindow> ui_ = nullptr;  // ui
+    CloudPtr current_scan_ = nullptr;  // 当前扫描
     SE3 last_loc_pose_;
 
     std::mutex initial_pose_mutex_;  // 初始定位锁

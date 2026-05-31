@@ -20,6 +20,4 @@ LocalizationResult LidarLocAdapter::GetLocalizationResult() const { return impl_
 
 void LidarLocAdapter::Finish() { impl_->Finish(); }
 
-void LidarLocAdapter::SetUI(std::shared_ptr<ui::PangolinWindow> ui) { impl_->SetUI(std::move(ui)); }
-
 }  // namespace lightning::loc

@@ -13,7 +13,6 @@
 #include "io/file_io.h"
 #include "io/yaml_io.h"
 #include "map_runtime/dynamic_map_manager.h"
-#include "ui/pangolin_window.h"
 #include "utils/timer.h"
 
 namespace lightning::loc {
@@ -114,7 +113,7 @@ bool LidarLoc::Init(const std::string& config_path) {
     dynamic_map_options.dynamic_layer_filter_z_max_ = options_.filter_z_max_;
 
     dynamic_map_manager_ = std::make_shared<DynamicMapManager>();
-    if (!dynamic_map_manager_->Init(dynamic_map_options, ui_)) {
+    if (!dynamic_map_manager_->Init(dynamic_map_options, nullptr)) {
         return false;
     }
     dynamic_map_manager_->SetTargetRebuildCallback(

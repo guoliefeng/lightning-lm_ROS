@@ -19,6 +19,14 @@ struct LocalizationResult;
 struct StateEstimate;
 }  // namespace lightning::domain::result
 
+namespace lightning::domain::sensor {
+struct CloudData;
+}  // namespace lightning::domain::sensor
+
+namespace lightning::domain::geometry {
+struct Pose3;
+}  // namespace lightning::domain::geometry
+
 namespace lightning::domain::contracts {
 class IEventSink;
 class ISystemRoot;
@@ -53,6 +61,7 @@ class LegacyRuntimeBridge {
 
     void HandleLocalizationResult(const domain::result::LocalizationResult& result);
     void HandleStateEstimate(const domain::result::StateEstimate& estimate);
+    void HandleCloudInWorld(const domain::sensor::CloudData& cloud, const domain::geometry::Pose3& pose);
 
     std::shared_ptr<domain::contracts::ISystemRoot> system_root_ = nullptr;
     std::string trajectory_id_;

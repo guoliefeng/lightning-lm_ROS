@@ -243,9 +243,6 @@ class ConfigurableLocalizer : public lightning::loc::ILocalizer, public IConfigu
         options.map_option_.map_path_ = global_map_path;
 
         impl_ = std::make_shared<LidarLocAdapter>(options);
-        if (pending_ui_) {
-            impl_->SetUI(pending_ui_);
-        }
         return true;
     }
 
@@ -265,13 +262,6 @@ class ConfigurableLocalizer : public lightning::loc::ILocalizer, public IConfigu
 
     bool ProcessKeyframeScan(CloudPtr cloud) override { return impl_ ? impl_->ProcessKeyframeScan(cloud) : false; }
 
-    void SetUI(std::shared_ptr<ui::PangolinWindow> ui) override {
-        pending_ui_ = ui;
-        if (impl_) {
-            impl_->SetUI(std::move(ui));
-        }
-    }
-
     void SetInitialPose(const SE3& pose) override {
         if (impl_) {
             impl_->SetInitialPose(pose);
@@ -290,7 +280,6 @@ class ConfigurableLocalizer : public lightning::loc::ILocalizer, public IConfigu
 
    private:
     std::shared_ptr<LidarLocAdapter> impl_ = nullptr;
-    std::shared_ptr<ui::PangolinWindow> pending_ui_ = nullptr;
 };
 
 }  // namespace

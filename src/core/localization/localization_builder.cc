@@ -9,6 +9,8 @@ LocalizationComponents LocalizationBuilder::BuildLocalizationComponents(const st
                                                                        bool with_ui,
                                                                        bool online_mode,
                                                                        std::shared_ptr<ui::PangolinWindow> ui) {
+    (void)ui;
+
     application::system::LocalizationAssemblyOptions options;
     options.yaml_path = yaml_path;
     options.global_map_path = global_map_path;
@@ -26,9 +28,6 @@ LocalizationComponents LocalizationBuilder::BuildLocalizationComponents(const st
     components.localizer = assembly.localizer;
     components.fusion_engine = assembly.legacy_fusion_engine;
 
-    if (with_ui && ui) {
-        components.localizer->SetUI(ui);
-    }
     components.localizer->Init(yaml_path);
 
     return components;
