@@ -15,6 +15,7 @@
 
 namespace lightning::application::system {
 struct LocalizationAssembly;
+class RelocalizationCoordinator;
 }
 
 namespace lightning::application::trajectory {
@@ -58,6 +59,7 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
     std::shared_ptr<domain::contracts::ILocalizer> localizer_ = nullptr;
     std::shared_ptr<domain::contracts::IStateEstimator> state_estimator_ = nullptr;
     std::shared_ptr<domain::contracts::IPoseGraphBackend> pose_graph_backend_ = nullptr;
+    std::shared_ptr<system::RelocalizationCoordinator> relocalization_coordinator_ = nullptr;
     std::shared_ptr<domain::contracts::IEventSink> event_sink_ = nullptr;
 
     mutable std::mutex mutex_;

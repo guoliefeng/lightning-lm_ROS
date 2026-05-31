@@ -68,6 +68,8 @@ class LegacyRuntimeBridge::BridgeEventSink : public domain::contracts::IEventSin
         }
     }
 
+    void OnRelocalizationState(domain::result::RelocalizationState) override {}
+
     void OnMapState(const domain::result::MapState&) override {}
 
     void OnCloudInWorld(const domain::sensor::CloudData& cloud, const domain::geometry::Pose3& pose) override {

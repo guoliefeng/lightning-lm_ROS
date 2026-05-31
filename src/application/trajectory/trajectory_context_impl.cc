@@ -6,6 +6,7 @@
 #include <glog/logging.h>
 
 #include "application/system/system_assembler.h"
+#include "application/system/relocalization_coordinator.h"
 #include "application/trajectory/trajectory_legacy_conversion.h"
 #include "common/eigen_types.h"
 #include "common/point_def.h"
@@ -34,7 +35,8 @@ TrajectoryContextImpl::TrajectoryContextImpl(Options options, system::Localizati
       motion_estimator_(std::move(assembly.motion_estimator)),
       localizer_(std::move(assembly.localizer)),
       state_estimator_(std::move(assembly.state_estimator)),
-      pose_graph_backend_(std::move(assembly.pose_graph_backend)) {
+      pose_graph_backend_(std::move(assembly.pose_graph_backend)),
+      relocalization_coordinator_(std::move(assembly.relocalization_coordinator)) {
     WireTrajectoryFlow();
 }
 
@@ -129,6 +131,9 @@ void TrajectoryContextImpl::FeedCloud(const domain::sensor::CloudData& cloud) {
 void TrajectoryContextImpl::SetEventSink(std::shared_ptr<domain::contracts::IEventSink> sink) {
     UL lock(mutex_);
     event_sink_ = std::move(sink);
+    if (relocalization_coordinator_) {
+        relocalization_coordinator_->SetEventSink(event_sink_);
+    }
 }
 
 domain::result::StateEstimate TrajectoryContextImpl::GetLatestStateEstimate() const {

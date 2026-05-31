@@ -5,8 +5,11 @@
 #include <string>
 #include <vector>
 
+#include "domain/contracts/global_initializer.h"
 #include "domain/contracts/localizer.h"
+#include "domain/contracts/local_tracker.h"
 #include "domain/contracts/map_state_repository.h"
+#include "domain/contracts/map_odom_authority.h"
 #include "domain/contracts/motion_estimator.h"
 #include "domain/contracts/pose_graph_backend.h"
 #include "domain/contracts/sensor_collator.h"
@@ -24,6 +27,9 @@ enum class PluginRole {
     kStateEstimator,
     kPoseGraphBackend,
     kMapStateRepository,
+    kGlobalInitializer,
+    kLocalTracker,
+    kMapOdomAuthority,
 };
 
 struct PluginDescriptor {
@@ -41,6 +47,9 @@ class IPluginRegistry {
     using StateEstimatorFactory = std::function<std::shared_ptr<IStateEstimator>()>;
     using PoseGraphBackendFactory = std::function<std::shared_ptr<IPoseGraphBackend>()>;
     using MapStateRepositoryFactory = std::function<std::shared_ptr<IMapStateRepository>()>;
+    using GlobalInitializerFactory = std::function<std::shared_ptr<IGlobalInitializer>()>;
+    using LocalTrackerFactory = std::function<std::shared_ptr<ILocalTracker>()>;
+    using MapOdomAuthorityFactory = std::function<std::shared_ptr<IMapOdomAuthority>()>;
 
     virtual ~IPluginRegistry() = default;
 
@@ -55,6 +64,9 @@ class IPluginRegistry {
     virtual std::shared_ptr<IStateEstimator> CreateStateEstimator(const std::string& key) const = 0;
     virtual std::shared_ptr<IPoseGraphBackend> CreatePoseGraphBackend(const std::string& key) const = 0;
     virtual std::shared_ptr<IMapStateRepository> CreateMapStateRepository(const std::string& key) const = 0;
+    virtual std::shared_ptr<IGlobalInitializer> CreateGlobalInitializer(const std::string& key) const = 0;
+    virtual std::shared_ptr<ILocalTracker> CreateLocalTracker(const std::string& key) const = 0;
+    virtual std::shared_ptr<IMapOdomAuthority> CreateMapOdomAuthority(const std::string& key) const = 0;
 };
 
 }  // namespace lightning::domain::contracts

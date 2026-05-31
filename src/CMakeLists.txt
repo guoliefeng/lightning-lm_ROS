@@ -24,8 +24,11 @@ add_library(${PROJECT_NAME}.libs SHARED
         bridges/localization_bridge_ros1.cc
         bridges/sensor_conversion.cc
 
+        adapters/global_initializer_passthrough.cc
         adapters/laser_mapping_adapter.cc
         adapters/lidar_loc_adapter.cc
+        adapters/local_tracker_passthrough.cc
+        adapters/map_odom_authority_passthrough.cc
         adapters/pgo_adapter.cc
 
         plugins/registry/default_plugin_registry.cc
@@ -41,6 +44,7 @@ add_library(${PROJECT_NAME}.libs SHARED
         core/localization/localization_builder.cc
         core/localization/localization_runtime_factory.cc
         core/localization/localization.cpp
+        application/system/relocalization_coordinator.cc
         application/system/system_assembler.cc
         application/system/system_root_impl.cc
         application/system/legacy_runtime_bridge.cc

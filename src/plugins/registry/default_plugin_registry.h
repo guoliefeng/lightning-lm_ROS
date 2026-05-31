@@ -39,6 +39,9 @@ class DefaultPluginRegistry : public IPluginRegistry {
     void RegisterStateEstimator(const PluginDescriptor& descriptor, StateEstimatorFactory factory);
     void RegisterPoseGraphBackend(const PluginDescriptor& descriptor, PoseGraphBackendFactory factory);
     void RegisterMapStateRepository(const PluginDescriptor& descriptor, MapStateRepositoryFactory factory);
+    void RegisterGlobalInitializer(const PluginDescriptor& descriptor, GlobalInitializerFactory factory);
+    void RegisterLocalTracker(const PluginDescriptor& descriptor, LocalTrackerFactory factory);
+    void RegisterMapOdomAuthority(const PluginDescriptor& descriptor, MapOdomAuthorityFactory factory);
 
     bool HasPlugin(PluginRole role, const std::string& key) const override;
     std::vector<PluginDescriptor> ListPlugins() const override;
@@ -51,6 +54,11 @@ class DefaultPluginRegistry : public IPluginRegistry {
     std::shared_ptr<domain::contracts::IStateEstimator> CreateStateEstimator(const std::string& key) const override;
     std::shared_ptr<domain::contracts::IPoseGraphBackend> CreatePoseGraphBackend(const std::string& key) const override;
     std::shared_ptr<domain::contracts::IMapStateRepository> CreateMapStateRepository(
+        const std::string& key) const override;
+    std::shared_ptr<domain::contracts::IGlobalInitializer> CreateGlobalInitializer(
+        const std::string& key) const override;
+    std::shared_ptr<domain::contracts::ILocalTracker> CreateLocalTracker(const std::string& key) const override;
+    std::shared_ptr<domain::contracts::IMapOdomAuthority> CreateMapOdomAuthority(
         const std::string& key) const override;
 
    private:
@@ -77,6 +85,9 @@ class DefaultPluginRegistry : public IPluginRegistry {
     std::unordered_map<std::string, StateEstimatorFactory> state_estimator_factories_;
     std::unordered_map<std::string, PoseGraphBackendFactory> pose_graph_backend_factories_;
     std::unordered_map<std::string, MapStateRepositoryFactory> map_state_repository_factories_;
+    std::unordered_map<std::string, GlobalInitializerFactory> global_initializer_factories_;
+    std::unordered_map<std::string, LocalTrackerFactory> local_tracker_factories_;
+    std::unordered_map<std::string, MapOdomAuthorityFactory> map_odom_authority_factories_;
     std::vector<PluginDescriptor> descriptors_;
 };
 

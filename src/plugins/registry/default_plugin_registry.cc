@@ -5,8 +5,11 @@
 
 #include <glog/logging.h>
 
+#include "adapters/global_initializer_passthrough.h"
 #include "adapters/laser_mapping_adapter.h"
 #include "adapters/lidar_loc_adapter.h"
+#include "adapters/local_tracker_passthrough.h"
+#include "adapters/map_odom_authority_passthrough.h"
 #include "adapters/pgo_adapter.h"
 #include "core/lio/pointcloud_preprocess.h"
 #include "core/localization/lidar_loc/lidar_loc.h"
@@ -23,6 +26,9 @@ using lightning::loc::LidarLocAdapter;
 using lightning::loc::LocalizationResult;
 using lightning::loc::MotionPipeline;
 using lightning::loc::PGOAdapter;
+using lightning::adapters::PassthroughGlobalInitializer;
+using lightning::adapters::PassthroughLocalTracker;
+using lightning::adapters::PassthroughMapOdomAuthority;
 
 namespace {
 
@@ -323,6 +329,23 @@ void DefaultPluginRegistry::RegisterMapStateRepository(const PluginDescriptor& d
     descriptors_.push_back(descriptor);
 }
 
+void DefaultPluginRegistry::RegisterGlobalInitializer(const PluginDescriptor& descriptor,
+                                                      GlobalInitializerFactory factory) {
+    global_initializer_factories_[descriptor.key] = std::move(factory);
+    descriptors_.push_back(descriptor);
+}
+
+void DefaultPluginRegistry::RegisterLocalTracker(const PluginDescriptor& descriptor, LocalTrackerFactory factory) {
+    local_tracker_factories_[descriptor.key] = std::move(factory);
+    descriptors_.push_back(descriptor);
+}
+
+void DefaultPluginRegistry::RegisterMapOdomAuthority(const PluginDescriptor& descriptor,
+                                                     MapOdomAuthorityFactory factory) {
+    map_odom_authority_factories_[descriptor.key] = std::move(factory);
+    descriptors_.push_back(descriptor);
+}
+
 bool DefaultPluginRegistry::HasPlugin(PluginRole role, const std::string& key) const {
     return std::any_of(descriptors_.begin(), descriptors_.end(),
                        [&](const PluginDescriptor& descriptor) { return descriptor.role == role && descriptor.key == key; });
@@ -383,6 +406,26 @@ std::shared_ptr<domain::contracts::IMapStateRepository> DefaultPluginRegistry::C
         map_state_repository_factories_, key);
 }
 
+std::shared_ptr<domain::contracts::IGlobalInitializer> DefaultPluginRegistry::CreateGlobalInitializer(
+    const std::string& key) const {
+    return CreateFromFactoryMap<decltype(global_initializer_factories_),
+                                std::shared_ptr<domain::contracts::IGlobalInitializer>>(
+        global_initializer_factories_, key);
+}
+
+std::shared_ptr<domain::contracts::ILocalTracker> DefaultPluginRegistry::CreateLocalTracker(
+    const std::string& key) const {
+    return CreateFromFactoryMap<decltype(local_tracker_factories_),
+                                std::shared_ptr<domain::contracts::ILocalTracker>>(local_tracker_factories_, key);
+}
+
+std::shared_ptr<domain::contracts::IMapOdomAuthority> DefaultPluginRegistry::CreateMapOdomAuthority(
+    const std::string& key) const {
+    return CreateFromFactoryMap<decltype(map_odom_authority_factories_),
+                                std::shared_ptr<domain::contracts::IMapOdomAuthority>>(
+        map_odom_authority_factories_, key);
+}
+
 void DefaultPluginRegistry::RegisterDefaults() {
     RegisterSensorCollator({PluginRole::kSensorCollator, "passthrough_sensor_collator",
                             "Minimal in-process sensor collator used before trajectory collation migration."},
@@ -418,6 +461,18 @@ void DefaultPluginRegistry::RegisterDefaults() {
     RegisterMapStateRepository({PluginRole::kMapStateRepository, "null_map_state_repository",
                                 "In-memory placeholder repository until persistent map state storage is migrated."},
                                []() { return std::make_shared<NullMapStateRepository>(); });
+
+    RegisterGlobalInitializer({PluginRole::kGlobalInitializer, "passthrough_global_initializer",
+                               "Semantic placeholder for global scan-to-map initialization."},
+                              []() { return std::make_shared<PassthroughGlobalInitializer>(); });
+
+    RegisterLocalTracker({PluginRole::kLocalTracker, "passthrough_local_tracker",
+                          "Semantic placeholder for continuous local tracking."},
+                         []() { return std::make_shared<PassthroughLocalTracker>(); });
+
+    RegisterMapOdomAuthority({PluginRole::kMapOdomAuthority, "passthrough_map_odom_authority",
+                              "Single in-process authority for map-to-odom correction state."},
+                             []() { return std::make_shared<PassthroughMapOdomAuthority>(); });
 }
 
 }  // namespace lightning::plugins::registry
