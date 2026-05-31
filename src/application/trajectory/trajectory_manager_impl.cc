@@ -46,7 +46,7 @@ std::vector<std::string> TrajectoryManagerImpl::ListTrajectoryIds() const {
 }
 
 bool TrajectoryManagerImpl::RemoveTrajectory(const std::string& trajectory_id) {
-    std::shared_ptr<TrajectoryContextImpl> removed;
+    std::shared_ptr<domain::contracts::ITrajectoryContext> removed;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto iter = trajectories_.find(trajectory_id);

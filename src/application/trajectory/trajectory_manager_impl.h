@@ -7,14 +7,14 @@
 #include <unordered_map>
 #include <vector>
 
-#include "application/trajectory/trajectory_context_impl.h"
 #include "domain/contracts/trajectory_manager.h"
 
 namespace lightning::application::trajectory {
 
 class TrajectoryManagerImpl : public domain::contracts::ITrajectoryManager {
    public:
-    using CreateTrajectoryFn = std::function<std::shared_ptr<TrajectoryContextImpl>(const std::string&)>;
+    using CreateTrajectoryFn =
+        std::function<std::shared_ptr<domain::contracts::ITrajectoryContext>(const std::string&)>;
 
     explicit TrajectoryManagerImpl(CreateTrajectoryFn create_trajectory);
     ~TrajectoryManagerImpl() override = default;
@@ -28,7 +28,7 @@ class TrajectoryManagerImpl : public domain::contracts::ITrajectoryManager {
    private:
     CreateTrajectoryFn create_trajectory_;
     mutable std::mutex mutex_;
-    std::unordered_map<std::string, std::shared_ptr<TrajectoryContextImpl>> trajectories_;
+    std::unordered_map<std::string, std::shared_ptr<domain::contracts::ITrajectoryContext>> trajectories_;
 };
 
 }  // namespace lightning::application::trajectory

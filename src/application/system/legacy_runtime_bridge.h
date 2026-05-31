@@ -26,14 +26,13 @@ class ISystemRoot;
 
 namespace lightning::application::system {
 
-class SystemRootImpl;
-
 class LegacyRuntimeBridge {
    public:
     using TFCallback = loc::ILocalizationRuntime::TFCallback;
     using LocStateCallback = loc::ILocalizationRuntime::LocStateCallback;
 
-    LegacyRuntimeBridge(std::shared_ptr<SystemRootImpl> system_root, std::string trajectory_id = "default");
+    LegacyRuntimeBridge(std::shared_ptr<domain::contracts::ISystemRoot> system_root,
+                        std::string trajectory_id = "default");
     ~LegacyRuntimeBridge();
 
     bool Init(const std::string& yaml_path, std::shared_ptr<domain::contracts::ISystemRoot> root);
@@ -55,7 +54,7 @@ class LegacyRuntimeBridge {
     void HandleLocalizationResult(const domain::result::LocalizationResult& result);
     void HandleStateEstimate(const domain::result::StateEstimate& estimate);
 
-    std::shared_ptr<SystemRootImpl> system_root_ = nullptr;
+    std::shared_ptr<domain::contracts::ISystemRoot> system_root_ = nullptr;
     std::string trajectory_id_;
     std::unique_ptr<trajectory::legacy::LegacyCloudConverter> cloud_converter_;
     std::shared_ptr<BridgeEventSink> event_sink_;

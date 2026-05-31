@@ -40,7 +40,7 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
     domain::result::StateEstimate GetLatestStateEstimate() const override;
     domain::result::LocalizationResult GetLatestLocalizationResult() const override;
 
-    void SetInitialPose(const domain::geometry::Pose3& pose);
+    void SetInitialPose(const domain::geometry::Pose3& pose) override;
 
    private:
     void WireTrajectoryFlow();

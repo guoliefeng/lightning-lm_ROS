@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "application/system/localization_assembly_hook_host.h"
 #include "domain/contracts/plugin_registry.h"
 #include "domain/contracts/map_state_repository.h"
 #include "domain/contracts/system_root.h"
@@ -15,9 +16,7 @@
 
 namespace lightning::application::system {
 
-struct LocalizationAssembly;
-
-class SystemRootImpl : public domain::contracts::ISystemRoot {
+class SystemRootImpl : public domain::contracts::ISystemRoot, public ILocalizationAssemblyHookHost {
    public:
     struct Options {
         std::string config_path;
@@ -28,33 +27,34 @@ class SystemRootImpl : public domain::contracts::ISystemRoot {
         std::shared_ptr<domain::contracts::IPluginRegistry> plugin_registry = nullptr;
     };
 
-    using TrajectoryAssemblyHook = std::function<void(const std::string& trajectory_id, LocalizationAssembly& assembly)>;
+    using TrajectoryAssemblyHook = ILocalizationAssemblyHookHost::TrajectoryAssemblyHook;
 
     SystemRootImpl();
     explicit SystemRootImpl(Options options);
     ~SystemRootImpl() override;
 
     bool Init(const std::string& config_path) override;
+    bool Start() override;
+    void Stop() override;
     void Shutdown() override;
     void SetEventSink(std::shared_ptr<domain::contracts::IEventSink> sink) override;
+    void SetEventSink(const std::string& trajectory_id,
+                      std::shared_ptr<domain::contracts::IEventSink> sink) override;
     std::shared_ptr<domain::contracts::ITrajectoryManager> GetTrajectoryManager() override;
 
-    bool Start();
-    void Stop();
-
     std::shared_ptr<domain::contracts::ITrajectoryContext> GetOrCreateDefaultTrajectory();
-    std::shared_ptr<domain::contracts::ITrajectoryContext> GetOrCreateTrajectory(const std::string& trajectory_id);
+    std::shared_ptr<domain::contracts::ITrajectoryContext> GetOrCreateTrajectory(
+        const std::string& trajectory_id) override;
 
     bool FeedImuToDefaultTrajectory(const domain::sensor::ImuData& imu);
     bool FeedCloudToDefaultTrajectory(const domain::sensor::CloudData& cloud);
     bool SetInitialPoseForDefaultTrajectory(const domain::geometry::Pose3& pose);
 
-    void SetEventSink(const std::string& trajectory_id, std::shared_ptr<domain::contracts::IEventSink> sink);
-    bool FeedImu(const std::string& trajectory_id, const domain::sensor::ImuData& imu);
-    bool FeedCloud(const std::string& trajectory_id, const domain::sensor::CloudData& cloud);
-    bool SetInitialPose(const std::string& trajectory_id, const domain::geometry::Pose3& pose);
+    bool FeedImu(const std::string& trajectory_id, const domain::sensor::ImuData& imu) override;
+    bool FeedCloud(const std::string& trajectory_id, const domain::sensor::CloudData& cloud) override;
+    bool SetInitialPose(const std::string& trajectory_id, const domain::geometry::Pose3& pose) override;
 
-    void SetTrajectoryAssemblyHook(TrajectoryAssemblyHook hook);
+    void SetTrajectoryAssemblyHook(TrajectoryAssemblyHook hook) override;
 
    private:
     std::shared_ptr<domain::contracts::ITrajectoryContext> FindTrajectoryLocked(const std::string& trajectory_id) const;

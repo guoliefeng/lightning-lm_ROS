@@ -12,7 +12,10 @@
 namespace lightning {
 namespace application::system {
 class LegacyRuntimeBridge;
-class SystemRootImpl;
+}
+
+namespace domain::contracts {
+class ISystemRoot;
 }
 
 namespace loc {
@@ -83,7 +86,7 @@ class Localization : public ILocalizationRuntime {
     std::mutex global_mutex_;  // 防止处理过程中被重复init
     Options options_;
 
-    std::shared_ptr<application::system::SystemRootImpl> system_root_ = nullptr;
+    std::shared_ptr<domain::contracts::ISystemRoot> system_root_ = nullptr;
     std::unique_ptr<application::system::LegacyRuntimeBridge> legacy_bridge_;
 
     /// 框架相关

@@ -4,10 +4,11 @@
 
 #include <glog/logging.h>
 
+#include "application/system/localization_assembly_hook_host.h"
 #include "application/system/system_assembler.h"
-#include "application/system/system_root_impl.h"
 #include "application/trajectory/trajectory_legacy_conversion.h"
 #include "domain/contracts/event_sink.h"
+#include "domain/contracts/system_root.h"
 #include "domain/result/map_state.h"
 #include "domain/result/motion_estimate.h"
 #include "domain/result/state_estimate.h"
@@ -78,15 +79,16 @@ class LegacyRuntimeBridge::BridgeEventSink : public domain::contracts::IEventSin
     LegacyRuntimeBridge* bridge_ = nullptr;
 };
 
-LegacyRuntimeBridge::LegacyRuntimeBridge(std::shared_ptr<SystemRootImpl> system_root, std::string trajectory_id)
+LegacyRuntimeBridge::LegacyRuntimeBridge(std::shared_ptr<domain::contracts::ISystemRoot> system_root,
+                                         std::string trajectory_id)
     : system_root_(std::move(system_root)), trajectory_id_(std::move(trajectory_id)) {}
 
 LegacyRuntimeBridge::~LegacyRuntimeBridge() { Finish(); }
 
 bool LegacyRuntimeBridge::Init(const std::string& yaml_path, std::shared_ptr<domain::contracts::ISystemRoot> root) {
-    system_root_ = std::dynamic_pointer_cast<SystemRootImpl>(std::move(root));
+    system_root_ = std::move(root);
     if (!system_root_) {
-        LOG(ERROR) << "LegacyRuntimeBridge requires SystemRootImpl for legacy trajectory helpers";
+        LOG(ERROR) << "LegacyRuntimeBridge requires an ISystemRoot";
         return false;
     }
     return Init(yaml_path);
@@ -100,7 +102,7 @@ bool LegacyRuntimeBridge::Init(const std::string& yaml_path) {
     }
 
     if (!system_root_) {
-        LOG(ERROR) << "LegacyRuntimeBridge requires a SystemRootImpl";
+        LOG(ERROR) << "LegacyRuntimeBridge requires an ISystemRoot";
         return false;
     }
 
@@ -119,14 +121,18 @@ bool LegacyRuntimeBridge::Init(const std::string& yaml_path) {
         ui_->Init();
     }
 
-    system_root_->SetTrajectoryAssemblyHook(
-        [ui = ui_](const std::string&, LocalizationAssembly& assembly) {
+    auto hook_host = std::dynamic_pointer_cast<ILocalizationAssemblyHookHost>(system_root_);
+    if (hook_host) {
+        hook_host->SetTrajectoryAssemblyHook([ui = ui_](const std::string&, LocalizationAssembly& assembly) {
             if (ui && assembly.localizer) {
                 assembly.localizer->SetUI(ui);
             }
         });
+    } else if (ui_) {
+        LOG(WARNING) << "system root does not support localization assembly hook; localizer UI hook skipped";
+    }
 
-    event_sink_ = std::dynamic_pointer_cast<BridgeEventSink>(CreateEventSink());
+    CreateEventSink();
     if (!system_root_->Init(yaml_path)) {
         return false;
     }
@@ -142,7 +148,9 @@ bool LegacyRuntimeBridge::Init(const std::string& yaml_path) {
 void LegacyRuntimeBridge::Finish() {
     if (system_root_) {
         system_root_->Shutdown();
-        system_root_->SetTrajectoryAssemblyHook(SystemRootImpl::TrajectoryAssemblyHook());
+        if (auto hook_host = std::dynamic_pointer_cast<ILocalizationAssemblyHookHost>(system_root_)) {
+            hook_host->SetTrajectoryAssemblyHook(ILocalizationAssemblyHookHost::TrajectoryAssemblyHook());
+        }
     }
 
     event_sink_.reset();

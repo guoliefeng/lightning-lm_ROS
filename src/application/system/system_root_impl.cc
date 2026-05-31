@@ -33,7 +33,7 @@ bool SystemRootImpl::Init(const std::string& config_path) {
     plugin_registry_ = options_.plugin_registry;
 
     auto create_trajectory = [this](const std::string& trajectory_id) {
-        return std::dynamic_pointer_cast<trajectory::TrajectoryContextImpl>(CreateTrajectoryContext(trajectory_id));
+        return CreateTrajectoryContext(trajectory_id);
     };
     trajectory_manager_ = std::make_shared<trajectory::TrajectoryManagerImpl>(std::move(create_trajectory));
 
@@ -161,7 +161,7 @@ bool SystemRootImpl::FeedCloud(const std::string& trajectory_id, const domain::s
 }
 
 bool SystemRootImpl::SetInitialPose(const std::string& trajectory_id, const domain::geometry::Pose3& pose) {
-    auto trajectory = std::dynamic_pointer_cast<trajectory::TrajectoryContextImpl>(GetOrCreateTrajectory(trajectory_id));
+    auto trajectory = GetOrCreateTrajectory(trajectory_id);
     if (!trajectory) {
         return false;
     }
