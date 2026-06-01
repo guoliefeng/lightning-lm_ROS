@@ -12,6 +12,8 @@
 #include "domain/contracts/sensor_pipeline.h"
 #include "domain/contracts/state_estimator.h"
 #include "domain/contracts/trajectory_context.h"
+#include "domain/result/motion_estimate.h"
+#include "domain/sensor/scan_snapshot.h"
 
 namespace lightning::application::system {
 struct LocalizationAssembly;
@@ -47,6 +49,13 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
    private:
     void WireTrajectoryFlow();
     void ConfigureLocalizationWorker();
+    bool ProcessKeyframeScanWithCoordinator(const CloudPtr& cloud);
+    void ProcessKeyframeScanLegacyFallback(const CloudPtr& cloud);
+    domain::sensor::ScanSnapshot BuildScanSnapshotFromKeyframe(const CloudPtr& cloud) const;
+    void HandleLocalizationResult(const CloudPtr& cloud,
+                                  const domain::result::LocalizationResult& result,
+                                  bool publish_event);
+    void PublishLocalizationResult(const domain::result::LocalizationResult& result);
     void PublishCloudInWorld(const CloudPtr& cloud, const domain::result::LocalizationResult& result);
 
     struct LegacyRuntimeResources;
@@ -69,6 +78,7 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
     int lidar_loc_skip_num_ = 1;
 
     domain::result::StateEstimate latest_state_estimate_;
+    domain::result::MotionEstimate latest_motion_estimate_;
     domain::result::LocalizationResult latest_localization_result_;
 };
 

@@ -33,6 +33,7 @@ class RelocalizationCoordinator {
     void SetEventSink(std::shared_ptr<domain::contracts::IEventSink> sink);
     domain::result::RelocalizationState GetState() const;
     domain::result::LocalizationMode GetMode() const;
+    domain::result::LocalizationResult GetLatestLocalizationResult() const;
     domain::geometry::Pose3 GetMapToOdom() const;
 
     domain::result::AlignmentResult ProcessScan(const domain::sensor::ScanSnapshot& snapshot);
@@ -49,7 +50,6 @@ class RelocalizationCoordinator {
         const domain::sensor::ScanSnapshot& snapshot) const;
     domain::geometry::Pose3 ResolveOdomPoseHint(const domain::sensor::ScanSnapshot& snapshot) const;
     void TransitionToLocked(domain::result::RelocalizationState state);
-    void PublishLocalizationResult(const domain::result::LocalizationResult& result) const;
 
     Options options_;
     std::shared_ptr<domain::contracts::IGlobalInitializer> global_initializer_ = nullptr;
@@ -60,6 +60,7 @@ class RelocalizationCoordinator {
     mutable std::mutex mutex_;
     domain::result::RelocalizationState state_ = domain::result::RelocalizationState::kIdle;
     domain::geometry::Pose3 last_tracking_pose_ = domain::geometry::Pose3::Identity();
+    domain::result::LocalizationResult latest_localization_result_;
     std::vector<domain::sensor::CloudData> accumulated_scans_;
 };
 

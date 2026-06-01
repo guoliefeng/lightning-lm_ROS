@@ -5,6 +5,7 @@
 #include <glog/logging.h>
 
 #include "application/system/relocalization_coordinator.h"
+#include "adapters/legacy_localizer_relocalization_adapter.h"
 #include "interfaces/localizer.h"
 #include "interfaces/motion_estimator.h"
 #include "interfaces/sensor_pipeline.h"
@@ -42,8 +43,9 @@ LocalizationAssembly SystemAssembler::AssembleLocalization(const LocalizationAss
     const std::string map_state_repository_name =
         GetComponentName(yaml, "map_state_repository", "null_map_state_repository");
     const std::string global_initializer_name =
-        GetComponentName(yaml, "global_initializer", "passthrough_global_initializer");
-    const std::string local_tracker_name = GetComponentName(yaml, "local_tracker", "passthrough_local_tracker");
+        GetComponentName(yaml, "global_initializer", "legacy_localizer_relocalization_adapter");
+    const std::string local_tracker_name =
+        GetComponentName(yaml, "local_tracker", "legacy_localizer_relocalization_adapter");
     const std::string map_odom_authority_name =
         GetComponentName(yaml, "map_odom_authority", "passthrough_map_odom_authority");
 
@@ -54,8 +56,6 @@ LocalizationAssembly SystemAssembler::AssembleLocalization(const LocalizationAss
     assembly.state_estimator = assembly.plugin_registry->CreateStateEstimator(state_estimator_name);
     assembly.pose_graph_backend = assembly.plugin_registry->CreatePoseGraphBackend(pose_graph_backend_name);
     assembly.map_state_repository = assembly.plugin_registry->CreateMapStateRepository(map_state_repository_name);
-    assembly.global_initializer = assembly.plugin_registry->CreateGlobalInitializer(global_initializer_name);
-    assembly.local_tracker = assembly.plugin_registry->CreateLocalTracker(local_tracker_name);
     assembly.map_odom_authority = assembly.plugin_registry->CreateMapOdomAuthority(map_odom_authority_name);
 
     if (!assembly.motion_estimator || !assembly.motion_estimator->Init(options.yaml_path)) {
@@ -87,6 +87,27 @@ LocalizationAssembly SystemAssembler::AssembleLocalization(const LocalizationAss
             LOG(ERROR) << "failed to configure localizer: " << localizer_name;
             return {};
         }
+    }
+
+    std::shared_ptr<adapters::LegacyLocalizerRelocalizationAdapter> legacy_relocalization_adapter;
+    const auto get_legacy_relocalization_adapter = [&]() {
+        if (!legacy_relocalization_adapter) {
+            legacy_relocalization_adapter =
+                std::make_shared<adapters::LegacyLocalizerRelocalizationAdapter>(assembly.localizer);
+        }
+        return legacy_relocalization_adapter;
+    };
+
+    if (global_initializer_name == "legacy_localizer_relocalization_adapter") {
+        assembly.global_initializer = get_legacy_relocalization_adapter();
+    } else {
+        assembly.global_initializer = assembly.plugin_registry->CreateGlobalInitializer(global_initializer_name);
+    }
+
+    if (local_tracker_name == "legacy_localizer_relocalization_adapter") {
+        assembly.local_tracker = get_legacy_relocalization_adapter();
+    } else {
+        assembly.local_tracker = assembly.plugin_registry->CreateLocalTracker(local_tracker_name);
     }
 
     if (!assembly.pose_graph_backend) {

@@ -26,6 +26,7 @@ add_library(${PROJECT_NAME}.libs SHARED
 
         adapters/global_initializer_passthrough.cc
         adapters/laser_mapping_adapter.cc
+        adapters/legacy_localizer_relocalization_adapter.cc
         adapters/lidar_loc_adapter.cc
         adapters/local_tracker_passthrough.cc
         adapters/map_odom_authority_passthrough.cc

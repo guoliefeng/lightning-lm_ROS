@@ -68,6 +68,11 @@ domain::result::LocalizationMode RelocalizationCoordinator::GetMode() const {
     return domain::result::LocalizationMode::kUninitialized;
 }
 
+domain::result::LocalizationResult RelocalizationCoordinator::GetLatestLocalizationResult() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return latest_localization_result_;
+}
+
 domain::geometry::Pose3 RelocalizationCoordinator::GetMapToOdom() const {
     return map_odom_authority_ ? map_odom_authority_->GetMapToOdom() : domain::geometry::Pose3::Identity();
 }
@@ -118,6 +123,7 @@ domain::result::AlignmentResult RelocalizationCoordinator::ProcessScan(
         std::lock_guard<std::mutex> lock(mutex_);
         if (alignment.success) {
             last_tracking_pose_ = alignment.pose;
+            latest_localization_result_ = localization;
             map_odom_authority_->UpdateFromLocalization(localization, ResolveOdomPoseHint(working_snapshot));
             accumulated_scans_.clear();
             TransitionToLocked(domain::result::RelocalizationState::kTracking);
@@ -129,9 +135,6 @@ domain::result::AlignmentResult RelocalizationCoordinator::ProcessScan(
         }
     }
 
-    if (alignment.success) {
-        PublishLocalizationResult(localization);
-    }
     return alignment;
 }
 
@@ -139,6 +142,7 @@ void RelocalizationCoordinator::Reset() {
     std::lock_guard<std::mutex> lock(mutex_);
     accumulated_scans_.clear();
     last_tracking_pose_ = domain::geometry::Pose3::Identity();
+    latest_localization_result_ = domain::result::LocalizationResult();
     if (global_initializer_) {
         global_initializer_->Reset();
     }
@@ -206,18 +210,6 @@ void RelocalizationCoordinator::TransitionToLocked(domain::result::Relocalizatio
     state_ = state;
     if (event_sink_) {
         event_sink_->OnRelocalizationState(state_);
-    }
-}
-
-void RelocalizationCoordinator::PublishLocalizationResult(
-    const domain::result::LocalizationResult& result) const {
-    std::shared_ptr<domain::contracts::IEventSink> sink;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        sink = event_sink_;
-    }
-    if (sink) {
-        sink->OnLocalizationResult(result);
     }
 }
 

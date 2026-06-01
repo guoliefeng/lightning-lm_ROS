@@ -80,5 +80,14 @@ target_link_libraries(test_ui
         ${third_party_libs}
 )
 
+add_executable(test_relocalization_main_path
+        test_relocalization_main_path.cc
+)
+
+target_link_libraries(test_relocalization_main_path
+        ${PROJECT_NAME}.libs
+        ${third_party_libs}
+)
+
 install(TARGETS run_slam_offline run_slam_online run_loc_offline run_loc_online run_map_chunker run_global_pcd_chunker
         DESTINATION lib/${PROJECT_NAME})

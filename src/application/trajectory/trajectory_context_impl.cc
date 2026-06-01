@@ -152,6 +152,91 @@ void TrajectoryContextImpl::SetInitialPose(const domain::geometry::Pose3& pose) 
     }
 }
 
+bool TrajectoryContextImpl::ProcessKeyframeScanWithCoordinator(const CloudPtr& cloud) {
+    if (!relocalization_coordinator_) {
+        return false;
+    }
+
+    const auto snapshot = BuildScanSnapshotFromKeyframe(cloud);
+    const auto alignment = relocalization_coordinator_->ProcessScan(snapshot);
+    if (!alignment.success) {
+        return true;
+    }
+
+    const auto result = relocalization_coordinator_->GetLatestLocalizationResult();
+    HandleLocalizationResult(cloud, result, true);
+    return true;
+}
+
+void TrajectoryContextImpl::ProcessKeyframeScanLegacyFallback(const CloudPtr& cloud) {
+    if (!localizer_) {
+        return;
+    }
+
+    localizer_->ProcessKeyframeScan(cloud);
+    const auto legacy_result = localizer_->GetLocalizationResult();
+    const auto result = legacy::ToLocalizationResult(legacy_result);
+    HandleLocalizationResult(cloud, result, false);
+
+    if (legacy_ && legacy_->legacy_fusion_engine) {
+        legacy_->legacy_fusion_engine->FeedLocalization(legacy_result);
+    } else if (pose_graph_backend_) {
+        pose_graph_backend_->FeedLocalizationResult(result);
+    } else {
+        PublishLocalizationResult(result);
+    }
+}
+
+domain::sensor::ScanSnapshot TrajectoryContextImpl::BuildScanSnapshotFromKeyframe(const CloudPtr& cloud) const {
+    domain::sensor::ScanSnapshot snapshot;
+    snapshot.stamp_ns = cloud ? static_cast<std::uint64_t>(cloud->header.stamp) : 0;
+    snapshot.frame_id = options_.id + "/lidar";
+    snapshot.source_id = options_.id;
+    snapshot.registered_scan = legacy::ToDomainCloud(cloud, snapshot.stamp_ns);
+    snapshot.registered_scan.frame_id = snapshot.frame_id;
+    snapshot.registered_scan.sensor_id = snapshot.source_id;
+
+    UL lock(mutex_);
+    if (latest_state_estimate_.valid) {
+        snapshot.odom_pose_hint = latest_state_estimate_.pose;
+        snapshot.has_odom_pose_hint = true;
+    } else if (latest_motion_estimate_.valid) {
+        snapshot.odom_pose_hint = latest_motion_estimate_.pose;
+        snapshot.has_odom_pose_hint = true;
+    }
+    return snapshot;
+}
+
+void TrajectoryContextImpl::HandleLocalizationResult(const CloudPtr& cloud,
+                                                     const domain::result::LocalizationResult& result,
+                                                     bool publish_event) {
+    {
+        UL lock(mutex_);
+        latest_localization_result_ = result;
+    }
+
+    if (state_estimator_) {
+        state_estimator_->FeedLocalizationResult(result);
+    }
+
+    PublishCloudInWorld(cloud, result);
+
+    if (publish_event) {
+        PublishLocalizationResult(result);
+    }
+}
+
+void TrajectoryContextImpl::PublishLocalizationResult(const domain::result::LocalizationResult& result) {
+    std::shared_ptr<domain::contracts::IEventSink> sink;
+    {
+        UL lock(mutex_);
+        sink = event_sink_;
+    }
+    if (sink) {
+        sink->OnLocalizationResult(result);
+    }
+}
+
 void TrajectoryContextImpl::WireTrajectoryFlow() {
     if (sensor_collator_) {
         sensor_collator_->SetImuHandler([this](const domain::sensor::ImuData& imu) {
@@ -170,6 +255,11 @@ void TrajectoryContextImpl::WireTrajectoryFlow() {
     if (sensor_pipeline_) {
         sensor_pipeline_->SetDeadReckoningCallback([this](const NavState& state) {
             auto estimate = legacy::ToMotionEstimate(state, domain::result::MotionEstimateSource::kDeadReckoning);
+
+            {
+                UL lock(mutex_);
+                latest_motion_estimate_ = estimate;
+            }
 
             if (localizer_) {
                 localizer_->FeedDeadReckoning(state);
@@ -193,6 +283,11 @@ void TrajectoryContextImpl::WireTrajectoryFlow() {
 
         sensor_pipeline_->SetLidarOdomCallback([this](const NavState& state) {
             auto estimate = legacy::ToMotionEstimate(state, domain::result::MotionEstimateSource::kLidarOdometry);
+
+            {
+                UL lock(mutex_);
+                latest_motion_estimate_ = estimate;
+            }
 
             if (localizer_) {
                 localizer_->FeedLidarOdom(state);
@@ -222,37 +317,8 @@ void TrajectoryContextImpl::WireTrajectoryFlow() {
                 return;
             }
 
-            if (!localizer_) {
-                return;
-            }
-
-            localizer_->ProcessKeyframeScan(cloud);
-            const auto legacy_result = localizer_->GetLocalizationResult();
-            const auto result = legacy::ToLocalizationResult(legacy_result);
-            PublishCloudInWorld(cloud, result);
-
-            {
-                UL lock(mutex_);
-                latest_localization_result_ = result;
-            }
-
-            if (state_estimator_) {
-                state_estimator_->FeedLocalizationResult(result);
-            }
-
-            if (legacy_ && legacy_->legacy_fusion_engine) {
-                legacy_->legacy_fusion_engine->FeedLocalization(legacy_result);
-            } else if (pose_graph_backend_) {
-                pose_graph_backend_->FeedLocalizationResult(result);
-            } else {
-                std::shared_ptr<domain::contracts::IEventSink> sink;
-                {
-                    UL lock(mutex_);
-                    sink = event_sink_;
-                }
-                if (sink) {
-                    sink->OnLocalizationResult(result);
-                }
+            if (!ProcessKeyframeScanWithCoordinator(cloud)) {
+                ProcessKeyframeScanLegacyFallback(cloud);
             }
         });
     }
@@ -295,37 +361,8 @@ void TrajectoryContextImpl::ConfigureLocalizationWorker() {
     legacy_->localization_proc_cloud.SetMaxSize(1);
     legacy_->localization_proc_cloud.SetSkipParam(enable_lidar_loc_skip_, lidar_loc_skip_num_);
     legacy_->localization_proc_cloud.SetProcFunc([this](const CloudPtr& cloud) {
-        if (!localizer_) {
-            return;
-        }
-
-        localizer_->ProcessKeyframeScan(cloud);
-        const auto legacy_result = localizer_->GetLocalizationResult();
-        const auto result = legacy::ToLocalizationResult(legacy_result);
-        PublishCloudInWorld(cloud, result);
-
-        {
-            UL lock(mutex_);
-            latest_localization_result_ = result;
-        }
-
-        if (state_estimator_) {
-            state_estimator_->FeedLocalizationResult(result);
-        }
-
-        if (legacy_->legacy_fusion_engine) {
-            legacy_->legacy_fusion_engine->FeedLocalization(legacy_result);
-        } else if (pose_graph_backend_) {
-            pose_graph_backend_->FeedLocalizationResult(result);
-        } else {
-            std::shared_ptr<domain::contracts::IEventSink> sink;
-            {
-                UL lock(mutex_);
-                sink = event_sink_;
-            }
-            if (sink) {
-                sink->OnLocalizationResult(result);
-            }
+        if (!ProcessKeyframeScanWithCoordinator(cloud)) {
+            ProcessKeyframeScanLegacyFallback(cloud);
         }
     });
 }
