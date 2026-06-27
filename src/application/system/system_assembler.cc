@@ -117,8 +117,8 @@ LocalizationAssembly SystemAssembler::AssembleLocalization(const LocalizationAss
 
     assembly.legacy_fusion_engine = std::dynamic_pointer_cast<lightning::loc::IFusionEngine>(assembly.pose_graph_backend);
     if (!assembly.legacy_fusion_engine) {
-        LOG(ERROR) << "pose graph backend does not expose legacy fusion engine compatibility";
-        return {};
+        LOG(WARNING)
+            << "pose graph backend does not expose legacy fusion compatibility; continuing without legacy fusion engine";
     }
 
     if (assembly.global_initializer && assembly.local_tracker && assembly.map_odom_authority) {

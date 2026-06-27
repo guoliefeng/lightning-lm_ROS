@@ -20,6 +20,14 @@ struct LocalizationAssembly;
 class RelocalizationCoordinator;
 }
 
+namespace lightning {
+struct NavState;
+
+namespace loc {
+struct LocalizationResult;
+}
+}  // namespace lightning
+
 namespace lightning::application::trajectory {
 
 class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
@@ -55,6 +63,11 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
     void HandleLocalizationResult(const CloudPtr& cloud,
                                   const domain::result::LocalizationResult& result,
                                   bool publish_event);
+    void FeedMotionEstimateToBackends(const NavState& legacy_state,
+                                      const domain::result::MotionEstimate& estimate);
+    void FeedLocalizationToBackends(const loc::LocalizationResult* legacy_result,
+                                    const domain::result::LocalizationResult& result,
+                                    bool publish_if_unhandled);
     void PublishLocalizationResult(const domain::result::LocalizationResult& result);
     void PublishCloudInWorld(const CloudPtr& cloud, const domain::result::LocalizationResult& result);
 

@@ -177,14 +177,7 @@ void TrajectoryContextImpl::ProcessKeyframeScanLegacyFallback(const CloudPtr& cl
     const auto legacy_result = localizer_->GetLocalizationResult();
     const auto result = legacy::ToLocalizationResult(legacy_result);
     HandleLocalizationResult(cloud, result, false);
-
-    if (legacy_ && legacy_->legacy_fusion_engine) {
-        legacy_->legacy_fusion_engine->FeedLocalization(legacy_result);
-    } else if (pose_graph_backend_) {
-        pose_graph_backend_->FeedLocalizationResult(result);
-    } else {
-        PublishLocalizationResult(result);
-    }
+    FeedLocalizationToBackends(&legacy_result, result, true);
 }
 
 domain::sensor::ScanSnapshot TrajectoryContextImpl::BuildScanSnapshotFromKeyframe(const CloudPtr& cloud) const {
@@ -222,6 +215,45 @@ void TrajectoryContextImpl::HandleLocalizationResult(const CloudPtr& cloud,
     PublishCloudInWorld(cloud, result);
 
     if (publish_event) {
+        PublishLocalizationResult(result);
+    }
+}
+
+void TrajectoryContextImpl::FeedMotionEstimateToBackends(
+    const NavState& legacy_state,
+    const domain::result::MotionEstimate& estimate) {
+    if (legacy_ && legacy_->legacy_fusion_engine) {
+        switch (estimate.source) {
+            case domain::result::MotionEstimateSource::kDeadReckoning:
+                legacy_->legacy_fusion_engine->FeedDeadReckoning(legacy_state);
+                break;
+            case domain::result::MotionEstimateSource::kLidarOdometry:
+                legacy_->legacy_fusion_engine->FeedLidarOdom(legacy_state);
+                break;
+            case domain::result::MotionEstimateSource::kUnknown:
+            case domain::result::MotionEstimateSource::kExternalPrior:
+                break;
+        }
+    }
+
+    if (pose_graph_backend_) {
+        pose_graph_backend_->FeedMotionEstimate(estimate);
+    }
+}
+
+void TrajectoryContextImpl::FeedLocalizationToBackends(
+    const loc::LocalizationResult* legacy_result,
+    const domain::result::LocalizationResult& result,
+    bool publish_if_unhandled) {
+    if (legacy_ && legacy_->legacy_fusion_engine && legacy_result) {
+        legacy_->legacy_fusion_engine->FeedLocalization(*legacy_result);
+    }
+
+    if (pose_graph_backend_) {
+        pose_graph_backend_->FeedLocalizationResult(result);
+    }
+
+    if (publish_if_unhandled && !pose_graph_backend_) {
         PublishLocalizationResult(result);
     }
 }
@@ -267,9 +299,7 @@ void TrajectoryContextImpl::WireTrajectoryFlow() {
             if (state_estimator_) {
                 state_estimator_->FeedMotionEstimate(estimate);
             }
-            if (legacy_ && legacy_->legacy_fusion_engine) {
-                legacy_->legacy_fusion_engine->FeedDeadReckoning(state);
-            }
+            FeedMotionEstimateToBackends(state, estimate);
 
             std::shared_ptr<domain::contracts::IEventSink> sink;
             {
@@ -295,11 +325,7 @@ void TrajectoryContextImpl::WireTrajectoryFlow() {
             if (state_estimator_) {
                 state_estimator_->FeedMotionEstimate(estimate);
             }
-            if (legacy_ && legacy_->legacy_fusion_engine) {
-                legacy_->legacy_fusion_engine->FeedLidarOdom(state);
-            } else if (pose_graph_backend_) {
-                pose_graph_backend_->FeedMotionEstimate(estimate);
-            }
+            FeedMotionEstimateToBackends(state, estimate);
 
             std::shared_ptr<domain::contracts::IEventSink> sink;
             {

@@ -25,12 +25,14 @@ struct LocalizationAssembly {
     std::shared_ptr<domain::contracts::IMotionEstimator> motion_estimator = nullptr;
     std::shared_ptr<domain::contracts::ILocalizer> localizer = nullptr;
     std::shared_ptr<domain::contracts::IStateEstimator> state_estimator = nullptr;
+    // SLAM / pose graph backend. New backends are not required to expose legacy IFusionEngine.
     std::shared_ptr<domain::contracts::IPoseGraphBackend> pose_graph_backend = nullptr;
     std::shared_ptr<domain::contracts::IMapStateRepository> map_state_repository = nullptr;
     std::shared_ptr<domain::contracts::IGlobalInitializer> global_initializer = nullptr;
     std::shared_ptr<domain::contracts::ILocalTracker> local_tracker = nullptr;
     std::shared_ptr<domain::contracts::IMapOdomAuthority> map_odom_authority = nullptr;
     std::shared_ptr<RelocalizationCoordinator> relocalization_coordinator = nullptr;
+    // Optional compatibility path for historical runtime/fusion code.
     std::shared_ptr<lightning::loc::IFusionEngine> legacy_fusion_engine = nullptr;
 };
 

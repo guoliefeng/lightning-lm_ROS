@@ -1,9 +1,11 @@
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "application/system/relocalization_coordinator.h"
 #include "application/system/system_assembler.h"
@@ -18,13 +20,41 @@
 #include "domain/contracts/global_initializer.h"
 #include "domain/contracts/local_tracker.h"
 #include "domain/contracts/map_odom_authority.h"
+#include "domain/contracts/map_state_repository.h"
+#include "domain/contracts/plugin_registry.h"
+#include "domain/contracts/pose_graph_backend.h"
+#include "domain/contracts/sensor_collator.h"
 #include "domain/contracts/state_estimator.h"
 #include "domain/result/map_state.h"
+#include "interfaces/fusion_engine.h"
 #include "interfaces/localizer.h"
+#include "interfaces/motion_estimator.h"
 #include "interfaces/sensor_pipeline.h"
 
 namespace lightning {
 namespace {
+
+class FakeSensorCollator : public domain::contracts::ISensorCollator {
+   public:
+    void Start() override {}
+    void Stop() override {}
+    void AddImuMeasurement(const domain::sensor::ImuData& imu) override {
+        if (imu_handler) {
+            imu_handler(imu);
+        }
+    }
+    void AddCloudMeasurement(const domain::sensor::CloudData& cloud) override {
+        if (cloud_handler) {
+            cloud_handler(cloud);
+        }
+    }
+    void SetImuHandler(ImuHandler handler) override { imu_handler = std::move(handler); }
+    void SetCloudHandler(CloudHandler handler) override { cloud_handler = std::move(handler); }
+    void Reset() override {}
+
+    ImuHandler imu_handler;
+    CloudHandler cloud_handler;
+};
 
 class FakeSensorPipeline : public loc::ISensorPipeline {
    public:
@@ -39,6 +69,19 @@ class FakeSensorPipeline : public loc::ISensorPipeline {
     DeadReckoningCallback dead_reckoning_callback;
     LidarOdomCallback lidar_odom_callback;
     KeyframeScanCallback keyframe_scan_callback;
+};
+
+class FakeMotionEstimator : public loc::IMotionEstimator {
+   public:
+    bool Init(const std::string&) override { return true; }
+    void ProcessIMU(const IMUPtr&) override {}
+    void ProcessCloud(CloudPtr) override {}
+    bool Run() override { return true; }
+    NavState GetLidarOdomState() const override { return NavState(); }
+    NavState GetDeadReckoningState() const override { return NavState(); }
+    Keyframe::Ptr GetKeyframe() const override { return nullptr; }
+    CloudPtr GetUndistortedScan() const override { return nullptr; }
+    CloudPtr GetProjectedCloud() const override { return nullptr; }
 };
 
 class CountingLocalizer : public loc::ILocalizer {
@@ -63,6 +106,48 @@ class CountingLocalizer : public loc::ILocalizer {
 
     int process_count = 0;
     loc::LocalizationResult result;
+};
+
+class CountingPoseGraphBackend : public domain::contracts::IPoseGraphBackend {
+   public:
+    void FeedMotionEstimate(const domain::result::MotionEstimate& motion) override {
+        ++motion_count;
+        latest_motion = motion;
+    }
+
+    void FeedLocalizationResult(const domain::result::LocalizationResult& localization) override {
+        ++localization_count;
+        latest_localization = localization;
+        if (callback) {
+            callback(localization);
+        }
+    }
+
+    void SetOutputCallback(OutputCallback cb) override { callback = std::move(cb); }
+    domain::result::LocalizationResult GetLatestResult() const override { return latest_localization; }
+    void Reset() override {
+        latest_motion = domain::result::MotionEstimate();
+        latest_localization = domain::result::LocalizationResult();
+    }
+
+    int motion_count = 0;
+    int localization_count = 0;
+    domain::result::MotionEstimate latest_motion;
+    domain::result::LocalizationResult latest_localization;
+    OutputCallback callback;
+};
+
+class CountingFusionEngine : public loc::IFusionEngine {
+   public:
+    void FeedDeadReckoning(const NavState&) override { ++dead_reckoning_count; }
+    void FeedLidarOdom(const NavState&) override { ++lidar_odom_count; }
+    void FeedLocalization(const loc::LocalizationResult&) override { ++localization_count; }
+    void SetHighFrequencyOutputCallback(OutputCallback cb) override { callback = std::move(cb); }
+
+    int dead_reckoning_count = 0;
+    int lidar_odom_count = 0;
+    int localization_count = 0;
+    OutputCallback callback;
 };
 
 class CountingStateEstimator : public domain::contracts::IStateEstimator {
@@ -192,6 +277,74 @@ class CountingMapOdomAuthority : public domain::contracts::IMapOdomAuthority {
     domain::geometry::Pose3 map_to_odom = domain::geometry::Pose3::Identity();
 };
 
+class FakeMapStateRepository : public domain::contracts::IMapStateRepository {
+   public:
+    bool Load(const std::string&, domain::result::MapState&) override { return false; }
+    void Save(const domain::result::MapState&) override {}
+    bool Remove(const std::string&) override { return false; }
+    std::vector<std::string> ListMapIds() const override { return {}; }
+};
+
+class FakePluginRegistry : public domain::contracts::IPluginRegistry {
+   public:
+    FakePluginRegistry()
+        : sensor_collator(std::make_shared<FakeSensorCollator>()),
+          sensor_pipeline(std::make_shared<FakeSensorPipeline>()),
+          motion_estimator(std::make_shared<FakeMotionEstimator>()),
+          localizer(std::make_shared<CountingLocalizer>()),
+          state_estimator(std::make_shared<CountingStateEstimator>()),
+          pose_graph_backend(std::make_shared<CountingPoseGraphBackend>()),
+          map_state_repository(std::make_shared<FakeMapStateRepository>()),
+          map_odom_authority(std::make_shared<CountingMapOdomAuthority>()) {}
+
+    bool HasPlugin(domain::contracts::PluginRole, const std::string&) const override { return true; }
+    std::vector<domain::contracts::PluginDescriptor> ListPlugins() const override { return {}; }
+    std::vector<domain::contracts::PluginDescriptor> ListPlugins(domain::contracts::PluginRole) const override {
+        return {};
+    }
+
+    std::shared_ptr<domain::contracts::ISensorCollator> CreateSensorCollator(const std::string&) const override {
+        return sensor_collator;
+    }
+    std::shared_ptr<domain::contracts::ISensorPipeline> CreateSensorPipeline(const std::string&) const override {
+        return sensor_pipeline;
+    }
+    std::shared_ptr<domain::contracts::IMotionEstimator> CreateMotionEstimator(const std::string&) const override {
+        return motion_estimator;
+    }
+    std::shared_ptr<domain::contracts::ILocalizer> CreateLocalizer(const std::string&) const override {
+        return localizer;
+    }
+    std::shared_ptr<domain::contracts::IStateEstimator> CreateStateEstimator(const std::string&) const override {
+        return state_estimator;
+    }
+    std::shared_ptr<domain::contracts::IPoseGraphBackend> CreatePoseGraphBackend(const std::string&) const override {
+        return pose_graph_backend;
+    }
+    std::shared_ptr<domain::contracts::IMapStateRepository> CreateMapStateRepository(
+        const std::string&) const override {
+        return map_state_repository;
+    }
+    std::shared_ptr<domain::contracts::IGlobalInitializer> CreateGlobalInitializer(const std::string&) const override {
+        return nullptr;
+    }
+    std::shared_ptr<domain::contracts::ILocalTracker> CreateLocalTracker(const std::string&) const override {
+        return nullptr;
+    }
+    std::shared_ptr<domain::contracts::IMapOdomAuthority> CreateMapOdomAuthority(const std::string&) const override {
+        return map_odom_authority;
+    }
+
+    std::shared_ptr<FakeSensorCollator> sensor_collator;
+    std::shared_ptr<FakeSensorPipeline> sensor_pipeline;
+    std::shared_ptr<FakeMotionEstimator> motion_estimator;
+    std::shared_ptr<CountingLocalizer> localizer;
+    std::shared_ptr<CountingStateEstimator> state_estimator;
+    std::shared_ptr<CountingPoseGraphBackend> pose_graph_backend;
+    std::shared_ptr<FakeMapStateRepository> map_state_repository;
+    std::shared_ptr<CountingMapOdomAuthority> map_odom_authority;
+};
+
 CloudPtr MakeCloud() {
     CloudPtr cloud(new PointCloudType());
     cloud->header.stamp = 1230000000ULL;
@@ -205,6 +358,28 @@ CloudPtr MakeCloud() {
     point.time = 0.0;
     cloud->push_back(point);
     return cloud;
+}
+
+NavState MakeNavState(double timestamp_s) {
+    NavState state;
+    state.timestamp_ = timestamp_s;
+    state.pose_is_ok_ = true;
+    return state;
+}
+
+std::string WriteAssemblerSmokeYaml() {
+    const std::string path = "/tmp/lightning_backend_decoupling_smoke.yaml";
+    std::ofstream out(path);
+    out << "system:\n"
+        << "  sensor_collator: fake_sensor_collator\n"
+        << "  sensor_pipeline: fake_sensor_pipeline\n"
+        << "  motion_estimator: fake_motion_estimator\n"
+        << "  localizer: fake_localizer\n"
+        << "  state_estimator: fake_state_estimator\n"
+        << "  pose_graph_backend: fake_pose_graph_backend\n"
+        << "  map_state_repository: fake_map_state_repository\n"
+        << "  map_odom_authority: fake_map_odom_authority\n";
+    return path;
 }
 
 bool Check(bool condition, const std::string& message) {
@@ -322,6 +497,65 @@ bool TestLegacyFallbackPath() {
     return ok;
 }
 
+bool TestAssemblerAllowsBackendWithoutLegacyFusionCompatibility() {
+    auto registry = std::make_shared<FakePluginRegistry>();
+
+    application::system::LocalizationAssemblyOptions options;
+    options.yaml_path = WriteAssemblerSmokeYaml();
+    options.plugin_registry = registry;
+
+    const auto assembly = application::system::SystemAssembler::AssembleLocalization(options);
+
+    bool ok = true;
+    ok &= Check(assembly.pose_graph_backend != nullptr,
+                "assembler failed to keep pose_graph_backend without IFusionEngine compatibility");
+    ok &= Check(assembly.legacy_fusion_engine == nullptr,
+                "assembler unexpectedly created legacy fusion engine from a backend-only pose graph");
+    ok &= Check(assembly.relocalization_coordinator != nullptr,
+                "assembler did not create coordinator with legacy localizer relocalization adapter");
+    return ok;
+}
+
+bool TestLegacyFusionAndPoseGraphBothReceiveRuntimeData() {
+    auto pipeline = std::make_shared<FakeSensorPipeline>();
+    auto localizer = std::make_shared<CountingLocalizer>();
+    auto state_estimator = std::make_shared<CountingStateEstimator>();
+    auto pose_graph_backend = std::make_shared<CountingPoseGraphBackend>();
+    auto legacy_fusion_engine = std::make_shared<CountingFusionEngine>();
+    auto event_sink = std::make_shared<CountingEventSink>();
+
+    application::system::LocalizationAssembly assembly;
+    assembly.sensor_pipeline = pipeline;
+    assembly.localizer = localizer;
+    assembly.state_estimator = state_estimator;
+    assembly.pose_graph_backend = pose_graph_backend;
+    assembly.legacy_fusion_engine = legacy_fusion_engine;
+
+    application::trajectory::TrajectoryContextImpl::Options options;
+    options.id = "backend_decoupling";
+    application::trajectory::TrajectoryContextImpl context(options, std::move(assembly));
+    context.SetEventSink(event_sink);
+
+    pipeline->dead_reckoning_callback(MakeNavState(1.0));
+    pipeline->lidar_odom_callback(MakeNavState(2.0));
+    pipeline->keyframe_scan_callback(MakeCloud());
+
+    bool ok = true;
+    ok &= Check(legacy_fusion_engine->dead_reckoning_count == 1,
+                "legacy fusion did not receive dead reckoning");
+    ok &= Check(legacy_fusion_engine->lidar_odom_count == 1,
+                "legacy fusion did not receive lidar odometry");
+    ok &= Check(legacy_fusion_engine->localization_count == 1,
+                "legacy fusion did not receive localization fallback");
+    ok &= Check(pose_graph_backend->motion_count == 2,
+                "pose graph backend did not receive motion estimates when legacy fusion existed");
+    ok &= Check(pose_graph_backend->localization_count == 1,
+                "pose graph backend did not receive localization when legacy fusion existed");
+    ok &= Check(event_sink->localization_count == 1,
+                "pose graph output callback did not publish localization event");
+    return ok;
+}
+
 }  // namespace
 }  // namespace lightning
 
@@ -330,6 +564,8 @@ int main() {
     ok &= lightning::TestCoordinatorPath();
     ok &= lightning::TestCoordinatorAccumulatingDoesNotReportSuccess();
     ok &= lightning::TestLegacyFallbackPath();
+    ok &= lightning::TestAssemblerAllowsBackendWithoutLegacyFusionCompatibility();
+    ok &= lightning::TestLegacyFusionAndPoseGraphBothReceiveRuntimeData();
     if (!ok) {
         return EXIT_FAILURE;
     }
