@@ -249,12 +249,9 @@ bool LidarLoc::YawSearch(SE3& pose, double& confidence, CloudPtr input, CloudPtr
     confidence = 0;
     bool yaw_search_success = false;
 
-    constexpr int kMaxYawSearchCandidates = 24;
-    const int configured_step = lidar_loc::grid_search_angle_step;
-    const int step = std::min(configured_step, kMaxYawSearchCandidates);
-    if (step < configured_step) {
-        LOG(INFO) << "capping yaw search candidates from " << configured_step << " to " << step;
-    }
+    // 注意：不要削减 yaw 候选数——粗搜角分辨率不足会让精配准从过大的角度误差出发而失败
+    //（yangpu 场景实测 60→24 使外部初值初始化失败并回退到错误功能点）
+    const int step = lidar_loc::grid_search_angle_step;
     double radius = lidar_loc::grid_search_angle_range * constant::kDEG2RAD;
     double angle_search_step = 2 * radius / step;
 
