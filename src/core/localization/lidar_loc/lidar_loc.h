@@ -39,6 +39,8 @@ class LidarLoc {
         bool force_2d_ = true;                         // 强制在2D空间
         float min_init_confidence_ = 0.1;              // 初始化时要求的最小分值
         bool init_with_fp_ = true;                     // 是否使用功能点进行初始化
+        float max_init_yaw_diff_deg_ = 45.0f;          // 外部初值初始化后与 hint 的最大航向差
+        float external_pose_yaw_search_range_ = 30.0f; // 外部初值 yaw 搜索半角(度)，窄于全局 grid_search
         bool enable_parking_static_ = false;           // 是否在静止时输出固定位置
         bool enable_icp_adjust_ = false;               // 是否使用icp调整ndt匹配结果提高定位精度
 
@@ -92,7 +94,7 @@ class LidarLoc {
     bool TryOtherSolution(CloudPtr input, SE3& pose);
 
     /// 使用功能点初始化
-    bool InitWithFP(CloudPtr input, const SE3& fp_pose);
+    bool InitWithFP(CloudPtr input, const SE3& fp_pose, bool is_external_pose = false);
 
     /// 更新全局地图
     bool UpdateGlobalMap(const std::shared_ptr<TiledMap>& map);

@@ -92,6 +92,15 @@ bool LaserMapping::LoadParamsFromYAML(const std::string& yaml_file) {
         if (fasterlio["max_proj_kfs"]) {
             options_.max_proj_kfs_ = fasterlio["max_proj_kfs"].as<int>();
         }
+        if (fasterlio["min_effect_feat_surf"]) {
+            options_.min_effect_feat_surf_ = fasterlio["min_effect_feat_surf"].as<int>();
+        }
+        if (fasterlio["max_lidar_frame_trans_m"]) {
+            options_.max_lidar_frame_trans_m_ = fasterlio["max_lidar_frame_trans_m"].as<double>();
+        }
+        if (fasterlio["max_lidar_frame_rot_deg"]) {
+            options_.max_lidar_frame_rot_deg_ = fasterlio["max_lidar_frame_rot_deg"].as<double>();
+        }
 
         if (yaml["roi"] && yaml["roi"]["height_max"] && yaml["roi"]["height_min"]) {
             preprocess_->SetHeightROI(yaml["roi"]["height_max"].as<float>(), yaml["roi"]["height_min"].as<float>());
@@ -249,7 +258,24 @@ bool LaserMapping::Run() {
     state_point_ = kf_.GetX();
     state_point_.timestamp_ = measures_.lidar_end_time_;
 
+    const double delta_trans = (pred_state.pos_ - state_point_.pos_).norm();
     const double delta_rotation_deg = (pred_state.rot_.inverse() * state_point_.rot_).log().norm() * 180.0 / M_PI;
+
+    const bool excessive_update = delta_trans > options_.max_lidar_frame_trans_m_ ||
+                                  delta_rotation_deg > options_.max_lidar_frame_rot_deg_;
+    const bool degenerate_frame =
+        excessive_update ||
+        (effect_feat_surf_ < options_.min_effect_feat_surf_ && delta_trans > 0.5);
+
+    if (degenerate_frame) {
+        kf_.ChangeX(pred_state);
+        state_point_ = pred_state;
+        state_point_.timestamp_ = measures_.lidar_end_time_;
+        LOG(WARNING) << "LIO degenerate frame rejected: effect=" << effect_feat_surf_ << " (min "
+                     << options_.min_effect_feat_surf_ << "), delta_trans=" << delta_trans << " m (max "
+                     << options_.max_lidar_frame_trans_m_ << "), delta_rot=" << delta_rotation_deg << " deg (max "
+                     << options_.max_lidar_frame_rot_deg_ << ")";
+    }
 
     LOG(INFO) << "[ mapping ]: In num: " << scan_undistort_->points.size() << " down " << cur_pts
               << " Map grid num: " << ivox_->NumValidGrids() << " effect num : " << effect_feat_surf_ << ", "

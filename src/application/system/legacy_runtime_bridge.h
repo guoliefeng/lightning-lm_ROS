@@ -88,6 +88,7 @@ class LegacyRuntimeBridge {
     loc::LocalizationResult latest_localization_result_;
     domain::geometry::Pose3 latest_motion_pose_ = domain::geometry::Pose3::Identity();
     bool has_motion_pose_ = false;
+    bool map_to_odom_ready_ = false;
 
     double last_imu_time_ = 0.0;
     double last_cloud_time_ = 0.0;

@@ -28,6 +28,9 @@ fasterlio:
 
   kf_dis_th: 1.0               # 关键帧距离阈值
   kf_angle_th: 10.0            # 关键帧角度阈值(度)
+  min_effect_feat_surf: 80     # 有效特征极低且单帧平移>0.5m 时拒绝 LIO 更新
+  max_lidar_frame_trans_m: 1.5 # 单帧平移更新超过此值视为退化
+  max_lidar_frame_rot_deg: 8.0 # 单帧旋转更新超过此值视为退化
 
   acc_cov: 0.1
   gyr_cov: 0.1
@@ -88,6 +91,8 @@ lidar_loc:
   lidar_loc_odom_th: 0.5
   init_with_fp: true
   min_init_confidence: 0.5    # 港口场景地图与数据相隔一天，集装箱变动大，1m NDT 概率整体偏低
+  max_init_yaw_diff_deg: 45.0
+  external_pose_yaw_search_range: 30.0
   update_dynamic_cloud: true
   update_err_h: 0.2
   update_err_v: 0.2

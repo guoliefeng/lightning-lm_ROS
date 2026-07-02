@@ -166,6 +166,7 @@ void LegacyRuntimeBridge::Finish() {
     latest_localization_result_ = loc::LocalizationResult();
     latest_motion_pose_ = domain::geometry::Pose3::Identity();
     has_motion_pose_ = false;
+    map_to_odom_ready_ = false;
     map_odom_authority_.reset();
     last_imu_time_ = 0.0;
     last_cloud_time_ = 0.0;
@@ -261,6 +262,10 @@ void LegacyRuntimeBridge::HandleLocalizationResult(const domain::result::Localiz
 
     latest_localization_result_ = ToLegacyLocalizationResult(result);
 
+    if (result.valid && result.localizer_valid) {
+        map_to_odom_ready_ = true;
+    }
+
     PublishSplitTf(result.timestamp_s);
 
     if (ui_) {
@@ -287,12 +292,14 @@ void LegacyRuntimeBridge::HandleMotionEstimate(const domain::result::MotionEstim
 }
 
 void LegacyRuntimeBridge::PublishSplitTf(double timestamp_s) {
-    if (!tf_callback_ || !map_odom_authority_ || !has_motion_pose_) {
+    if (!tf_callback_ || !has_motion_pose_) {
         return;
     }
 
-    const auto map_to_odom = map_odom_authority_->GetMapToOdom();
-    tf_callback_(loc::bridges::ToTransformStamped(map_to_odom, "map", "odom", timestamp_s));
+    if (map_to_odom_ready_ && map_odom_authority_) {
+        const auto map_to_odom = map_odom_authority_->GetMapToOdom();
+        tf_callback_(loc::bridges::ToTransformStamped(map_to_odom, "map", "odom", timestamp_s));
+    }
     tf_callback_(loc::bridges::ToTransformStamped(latest_motion_pose_, "odom", "base_link", timestamp_s));
 }
 

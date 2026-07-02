@@ -59,6 +59,13 @@ bool LidarLoc::Init(const std::string& config_path) {
     options_.update_kf_dis_ = yaml.GetValue<double>("lidar_loc", "update_kf_dis");
     options_.update_lidar_loc_score_ = yaml.GetValue<double>("lidar_loc", "update_lidar_loc_score");
     options_.min_init_confidence_ = yaml.GetValue<float>("lidar_loc", "min_init_confidence");
+    try {
+        options_.max_init_yaw_diff_deg_ = yaml.GetValue<float>("lidar_loc", "max_init_yaw_diff_deg");
+        options_.external_pose_yaw_search_range_ =
+            yaml.GetValue<float>("lidar_loc", "external_pose_yaw_search_range");
+    } catch (...) {
+        // keep struct defaults when keys are absent
+    }
 
     options_.filter_z_min_ = yaml.GetValue<double>("lidar_loc", "filter_z_min");
     options_.filter_z_max_ = yaml.GetValue<double>("lidar_loc", "filter_z_max");
@@ -306,14 +313,43 @@ bool LidarLoc::YawSearch(SE3& pose, double& confidence, CloudPtr input, CloudPtr
     return yaw_search_success;
 }
 
-bool LidarLoc::InitWithFP(CloudPtr input, const SE3& fp_pose) {
+bool LidarLoc::InitWithFP(CloudPtr input, const SE3& fp_pose, bool is_external_pose) {
     assert(input != nullptr && !input->empty());
+
+    double saved_yaw_range = lidar_loc::grid_search_angle_range;
+    if (is_external_pose) {
+        lidar_loc::grid_search_angle_range = options_.external_pose_yaw_search_range_;
+        LOG(INFO) << "external pose init: narrow yaw search from +/-" << saved_yaw_range << " deg to +/-" 
+                  << options_.external_pose_yaw_search_range_ << " deg";
+    }
 
     // 使用功能点的位置进行定位初始化
     double fitness_score;
     SE3 pose_esti = fp_pose;
     CloudPtr output_cloud(new PointCloudType);
     loc_inited_ = YawSearch(pose_esti, fitness_score, input, output_cloud);
+
+    if (is_external_pose) {
+        lidar_loc::grid_search_angle_range = saved_yaw_range;
+    }
+
+    if (loc_inited_ && is_external_pose) {
+        const double hint_yaw = math::SE3ToRollPitchYaw(fp_pose).yaw;
+        const double est_yaw = math::SE3ToRollPitchYaw(pose_esti).yaw;
+        double yaw_diff = est_yaw - hint_yaw;
+        while (yaw_diff > M_PI) {
+            yaw_diff -= 2 * M_PI;
+        }
+        while (yaw_diff < -M_PI) {
+            yaw_diff += 2 * M_PI;
+        }
+        const double yaw_diff_deg = std::abs(yaw_diff) * 180.0 / M_PI;
+        if (yaw_diff_deg > options_.max_init_yaw_diff_deg_) {
+            LOG(WARNING) << "external pose init rejected: yaw diff " << yaw_diff_deg << " deg > limit "
+                         << options_.max_init_yaw_diff_deg_ << " deg (score=" << fitness_score << ")";
+            loc_inited_ = false;
+        }
+    }
 
     if (loc_inited_) {
         current_timestamp_ = math::ToSec(input->header.stamp);
@@ -322,6 +358,7 @@ bool LidarLoc::InitWithFP(CloudPtr input, const SE3& fp_pose) {
         localization_result_.pose_ = pose_esti;
         localization_result_.timestamp_ = current_timestamp_;
         localization_result_.lidar_loc_valid_ = true;
+        localization_result_.valid_ = true;
         localization_result_.status_ = LocalizationStatus::GOOD;
 
         last_abs_pose_set_ = true;
@@ -506,7 +543,7 @@ void LidarLoc::Align(const CloudPtr& input) {
                 dynamic_map_manager_->LoadOnPose(initial_pose_);
                 dynamic_map_manager_->RebuildTargetIfNeeded();
             }
-            if (InitWithFP(input, initial_pose_)) {
+            if (InitWithFP(input, initial_pose_, true)) {
                 LOG(INFO) << "init with external pose: " << initial_pose_.translation().transpose();
                 initial_pose_set_ = false;
                 return;

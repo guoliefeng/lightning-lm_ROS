@@ -47,6 +47,9 @@ class LaserMapping {
         double kf_angle_th_;
         bool proj_kfs_;
         int max_proj_kfs_;
+        int min_effect_feat_surf_ = 80;  // 极低有效特征时拒绝本帧（与过大步长联合判断）
+        double max_lidar_frame_trans_m_ = 1.5;
+        double max_lidar_frame_rot_deg_ = 8.0;
     };
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
