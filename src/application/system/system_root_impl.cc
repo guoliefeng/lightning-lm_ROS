@@ -161,6 +161,24 @@ bool SystemRootImpl::FeedCloud(const std::string& trajectory_id, const domain::s
     return true;
 }
 
+bool SystemRootImpl::FeedGnss(const std::string& trajectory_id, const domain::sensor::GnssData& gnss) {
+    auto trajectory = GetOrCreateTrajectory(trajectory_id);
+    if (!trajectory) {
+        return false;
+    }
+    trajectory->FeedGnss(gnss);
+    return true;
+}
+
+bool SystemRootImpl::FeedOdometry(const std::string& trajectory_id, const domain::sensor::OdometryData& odom) {
+    auto trajectory = GetOrCreateTrajectory(trajectory_id);
+    if (!trajectory) {
+        return false;
+    }
+    trajectory->FeedOdometry(odom);
+    return true;
+}
+
 bool SystemRootImpl::SetInitialPose(const std::string& trajectory_id, const domain::geometry::Pose3& pose) {
     auto trajectory = GetOrCreateTrajectory(trajectory_id);
     if (!trajectory) {

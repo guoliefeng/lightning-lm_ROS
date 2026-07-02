@@ -6,8 +6,10 @@
 #define LIGHTNING_LOC_SYSTEM_H
 
 #include <tf2_ros/transform_broadcaster.h>
+#include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
+#include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/PointCloud2.h>
 
 #include "livox_ros_driver/CustomMsg.h"
@@ -42,6 +44,10 @@ class LocSystem {
     void ProcessLidar(const sensor_msgs::PointCloud2::ConstPtr& cloud);
     void ProcessLidar(const livox_ros_driver::CustomMsg::ConstPtr& cloud);
 
+    /// 处理 GNSS / 轮速里程计（可选通道）
+    void ProcessGnss(const sensor_msgs::NavSatFix::ConstPtr& gnss);
+    void ProcessOdometry(const nav_msgs::Odometry::ConstPtr& odom);
+
     /// 实时模式下的spin
     void Spin();
 
@@ -60,10 +66,14 @@ class LocSystem {
     std::string imu_topic_;
     std::string cloud_topic_;
     std::string livox_topic_;
+    std::string gnss_topic_;
+    std::string odom_topic_;
 
     ros::Subscriber imu_sub_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber livox_sub_;
+    ros::Subscriber gnss_sub_;
+    ros::Subscriber odom_sub_;
 };
 
 }  // namespace lightning

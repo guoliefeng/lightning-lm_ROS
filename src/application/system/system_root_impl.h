@@ -49,6 +49,8 @@ class SystemRootImpl : public domain::contracts::ISystemRoot {
 
     bool FeedImu(const std::string& trajectory_id, const domain::sensor::ImuData& imu) override;
     bool FeedCloud(const std::string& trajectory_id, const domain::sensor::CloudData& cloud) override;
+    bool FeedGnss(const std::string& trajectory_id, const domain::sensor::GnssData& gnss) override;
+    bool FeedOdometry(const std::string& trajectory_id, const domain::sensor::OdometryData& odom) override;
     bool SetInitialPose(const std::string& trajectory_id, const domain::geometry::Pose3& pose) override;
 
     std::shared_ptr<domain::contracts::IMapOdomAuthority> GetMapOdomAuthority() const;

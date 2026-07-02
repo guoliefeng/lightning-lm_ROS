@@ -4,6 +4,8 @@ common:
   lidar_topic: "/lidar_preprocessor/meta_cloud"
   livox_lidar_topic: "/livox/lidar"
   imu_topic: "/ins_driver/imu"
+  gnss_topic: "/ins_driver/gps"       # NavSatFix，Phase D 通路（暂只记录，不参与融合）
+  odom_topic: "/localization/ins"     # nav_msgs/Odometry INS 里程计
 
 # fasterlio 参数
 fasterlio:

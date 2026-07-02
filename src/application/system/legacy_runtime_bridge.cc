@@ -204,6 +204,20 @@ void LegacyRuntimeBridge::FeedLegacyCloud(const SensorCloudInput& cloud) {
     system_root_->FeedCloud(trajectory_id_, domain_cloud);
 }
 
+void LegacyRuntimeBridge::FeedGnss(const domain::sensor::GnssData& gnss) {
+    if (!initialized_ || !system_root_) {
+        return;
+    }
+    system_root_->FeedGnss(trajectory_id_, gnss);
+}
+
+void LegacyRuntimeBridge::FeedOdometry(const domain::sensor::OdometryData& odom) {
+    if (!initialized_ || !system_root_) {
+        return;
+    }
+    system_root_->FeedOdometry(trajectory_id_, odom);
+}
+
 void LegacyRuntimeBridge::SetInitialPose(const SE3& pose) {
     if (!initialized_ || !system_root_) {
         return;

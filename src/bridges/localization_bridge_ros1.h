@@ -3,7 +3,9 @@
 #include <memory>
 #include <string>
 
+#include <nav_msgs/Odometry.h>
 #include <sensor_msgs/Imu.h>
+#include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/PointCloud2.h>
 
 #include "common/imu.h"
@@ -21,6 +23,8 @@ class LocalizationBridgeRos1 {
     void ProcessIMU(const IMUPtr& imu);
     void ProcessPointCloud2(const sensor_msgs::PointCloud2::ConstPtr& cloud);
     void ProcessLivoxCloud(const livox_ros_driver::CustomMsg::ConstPtr& cloud);
+    void ProcessGnss(const sensor_msgs::NavSatFix::ConstPtr& gnss);
+    void ProcessOdometry(const nav_msgs::Odometry::ConstPtr& odom);
     void SetInitialPose(const SE3& pose);
     void Finish();
 

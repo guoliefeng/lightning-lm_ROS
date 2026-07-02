@@ -48,6 +48,8 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
     void Stop() override;
     void FeedImu(const domain::sensor::ImuData& imu) override;
     void FeedCloud(const domain::sensor::CloudData& cloud) override;
+    void FeedGnss(const domain::sensor::GnssData& gnss) override;
+    void FeedOdometry(const domain::sensor::OdometryData& odom) override;
     void SetEventSink(std::shared_ptr<domain::contracts::IEventSink> sink) override;
     domain::result::StateEstimate GetLatestStateEstimate() const override;
     domain::result::LocalizationResult GetLatestLocalizationResult() const override;

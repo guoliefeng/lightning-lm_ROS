@@ -22,6 +22,8 @@ struct StateEstimate;
 
 namespace lightning::domain::sensor {
 struct CloudData;
+struct GnssData;
+struct OdometryData;
 }  // namespace lightning::domain::sensor
 
 namespace lightning::domain::geometry {
@@ -55,6 +57,8 @@ class LegacyRuntimeBridge {
 
     void FeedLegacyImu(const IMUPtr& imu);
     void FeedLegacyCloud(const SensorCloudInput& cloud);
+    void FeedGnss(const domain::sensor::GnssData& gnss);
+    void FeedOdometry(const domain::sensor::OdometryData& odom);
     void SetInitialPose(const SE3& pose);
     void SetTFCallback(TFCallback callback);
     void SetLocStateCallback(LocStateCallback callback);

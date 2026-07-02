@@ -173,12 +173,26 @@ class CountingStateEstimator : public domain::contracts::IStateEstimator {
         }
     }
 
+    void FeedGnss(const domain::sensor::GnssData& gnss) override {
+        ++gnss_count;
+        latest_gnss = gnss;
+    }
+
+    void FeedOdometry(const domain::sensor::OdometryData& odom) override {
+        ++odometry_count;
+        latest_odometry = odom;
+    }
+
     void SetOutputCallback(OutputCallback cb) override { callback = std::move(cb); }
     domain::result::StateEstimate GetLatestEstimate() const override { return latest; }
     void Reset() override { latest = domain::result::StateEstimate(); }
 
     int localization_count = 0;
+    int gnss_count = 0;
+    int odometry_count = 0;
     domain::result::StateEstimate latest;
+    domain::sensor::GnssData latest_gnss;
+    domain::sensor::OdometryData latest_odometry;
     OutputCallback callback;
 };
 
@@ -562,6 +576,44 @@ bool TestLegacyFusionAndPoseGraphBothReceiveRuntimeData() {
     return ok;
 }
 
+bool TestGnssAndOdometryChannels() {
+    auto collator = std::make_shared<FakeSensorCollator>();
+    auto pipeline = std::make_shared<FakeSensorPipeline>();
+    auto localizer = std::make_shared<CountingLocalizer>();
+    auto state_estimator = std::make_shared<CountingStateEstimator>();
+
+    application::system::LocalizationAssembly assembly;
+    assembly.sensor_collator = collator;
+    assembly.sensor_pipeline = pipeline;
+    assembly.localizer = localizer;
+    assembly.state_estimator = state_estimator;
+
+    application::trajectory::TrajectoryContextImpl::Options options;
+    options.id = "gnss_odom_channels";
+    application::trajectory::TrajectoryContextImpl context(options, std::move(assembly));
+
+    domain::sensor::GnssData gnss;
+    gnss.stamp_ns = 1000;
+    gnss.latitude_deg = 20.0;
+    gnss.longitude_deg = 110.0;
+    gnss.status = domain::sensor::GnssFixStatus::kFix;
+    context.FeedGnss(gnss);
+
+    domain::sensor::OdometryData odom;
+    odom.stamp_ns = 2000;
+    odom.linear_velocity = Eigen::Vector3d(1.0, 0.0, 0.0);
+    odom.twist_valid = true;
+    context.FeedOdometry(odom);
+
+    bool ok = true;
+    ok &= Check(state_estimator->gnss_count == 1, "state estimator did not receive gnss measurement");
+    ok &= Check(state_estimator->latest_gnss.latitude_deg == 20.0, "gnss payload was not preserved");
+    ok &= Check(state_estimator->odometry_count == 1, "state estimator did not receive odometry measurement");
+    ok &= Check(state_estimator->latest_odometry.linear_velocity.x() == 1.0,
+                "odometry payload was not preserved");
+    return ok;
+}
+
 bool TestMapOdomAuthorityFreeze() {
     auto map_odom_authority = std::make_shared<CountingMapOdomAuthority>();
     auto global_initializer = std::make_shared<SuccessGlobalInitializer>();
@@ -606,6 +658,7 @@ int main() {
     ok &= lightning::TestAssemblerAllowsBackendWithoutLegacyFusionCompatibility();
     ok &= lightning::TestLegacyFusionAndPoseGraphBothReceiveRuntimeData();
     ok &= lightning::TestMapOdomAuthorityFreeze();
+    ok &= lightning::TestGnssAndOdometryChannels();
     if (!ok) {
         return EXIT_FAILURE;
     }

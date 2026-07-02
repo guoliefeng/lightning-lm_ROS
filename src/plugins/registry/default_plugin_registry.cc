@@ -49,6 +49,18 @@ class PassThroughSensorCollator : public domain::contracts::ISensorCollator {
         }
     }
 
+    void AddGnssMeasurement(const domain::sensor::GnssData& gnss) override {
+        if (running_ && gnss_handler_) {
+            gnss_handler_(gnss);
+        }
+    }
+
+    void AddOdometryMeasurement(const domain::sensor::OdometryData& odom) override {
+        if (running_ && odometry_handler_) {
+            odometry_handler_(odom);
+        }
+    }
+
     void SetImuHandler(ImuHandler handler) override { imu_handler_ = std::move(handler); }
     void SetCloudHandler(CloudHandler handler) override { cloud_handler_ = std::move(handler); }
     void Reset() override {}
@@ -79,11 +91,31 @@ class PassThroughStateEstimator : public domain::contracts::IStateEstimator {
         Publish();
     }
 
+    void FeedGnss(const domain::sensor::GnssData& gnss) override {
+        ++gnss_count_;
+        latest_gnss_ = gnss;
+        LOG_EVERY_N(INFO, 100) << "state estimator received gnss #" << gnss_count_
+                               << ", lat: " << gnss.latitude_deg << ", lon: " << gnss.longitude_deg;
+    }
+
+    void FeedOdometry(const domain::sensor::OdometryData& odom) override {
+        ++odometry_count_;
+        latest_odometry_ = odom;
+        LOG_EVERY_N(INFO, 100) << "state estimator received odometry #" << odometry_count_
+                               << ", vel: " << odom.linear_velocity.transpose();
+    }
+
     void SetOutputCallback(OutputCallback callback) override { callback_ = std::move(callback); }
 
     domain::result::StateEstimate GetLatestEstimate() const override { return latest_; }
 
-    void Reset() override { latest_ = domain::result::StateEstimate(); }
+    void Reset() override {
+        latest_ = domain::result::StateEstimate();
+        latest_gnss_ = domain::sensor::GnssData();
+        latest_odometry_ = domain::sensor::OdometryData();
+        gnss_count_ = 0;
+        odometry_count_ = 0;
+    }
 
    private:
     void Publish() const {
@@ -93,6 +125,10 @@ class PassThroughStateEstimator : public domain::contracts::IStateEstimator {
     }
 
     domain::result::StateEstimate latest_;
+    domain::sensor::GnssData latest_gnss_;
+    domain::sensor::OdometryData latest_odometry_;
+    std::uint64_t gnss_count_ = 0;
+    std::uint64_t odometry_count_ = 0;
     OutputCallback callback_;
 };
 

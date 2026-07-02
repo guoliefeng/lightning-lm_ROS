@@ -26,6 +26,8 @@ class ISystemRoot {
     virtual std::shared_ptr<ITrajectoryContext> GetOrCreateTrajectory(const std::string& trajectory_id) = 0;
     virtual bool FeedImu(const std::string& trajectory_id, const sensor::ImuData& imu) = 0;
     virtual bool FeedCloud(const std::string& trajectory_id, const sensor::CloudData& cloud) = 0;
+    virtual bool FeedGnss(const std::string&, const sensor::GnssData&) { return false; }
+    virtual bool FeedOdometry(const std::string&, const sensor::OdometryData&) { return false; }
     virtual bool SetInitialPose(const std::string& trajectory_id, const geometry::Pose3& pose) = 0;
 };
 

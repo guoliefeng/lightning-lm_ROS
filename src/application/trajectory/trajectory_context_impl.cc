@@ -128,6 +128,18 @@ void TrajectoryContextImpl::FeedCloud(const domain::sensor::CloudData& cloud) {
     }
 }
 
+void TrajectoryContextImpl::FeedGnss(const domain::sensor::GnssData& gnss) {
+    if (sensor_collator_) {
+        sensor_collator_->AddGnssMeasurement(gnss);
+    }
+}
+
+void TrajectoryContextImpl::FeedOdometry(const domain::sensor::OdometryData& odom) {
+    if (sensor_collator_) {
+        sensor_collator_->AddOdometryMeasurement(odom);
+    }
+}
+
 void TrajectoryContextImpl::SetEventSink(std::shared_ptr<domain::contracts::IEventSink> sink) {
     UL lock(mutex_);
     event_sink_ = std::move(sink);
@@ -281,6 +293,19 @@ void TrajectoryContextImpl::WireTrajectoryFlow() {
         sensor_collator_->SetCloudHandler([this](const domain::sensor::CloudData& cloud) {
             if (sensor_pipeline_) {
                 sensor_pipeline_->ProcessCloud(legacy::ToLegacyCloud(cloud));
+            }
+        });
+
+        // GNSS/轮速当前只进状态估计器（Phase D 第一步：通路先行，融合后续）
+        sensor_collator_->SetGnssHandler([this](const domain::sensor::GnssData& gnss) {
+            if (state_estimator_) {
+                state_estimator_->FeedGnss(gnss);
+            }
+        });
+
+        sensor_collator_->SetOdometryHandler([this](const domain::sensor::OdometryData& odom) {
+            if (state_estimator_) {
+                state_estimator_->FeedOdometry(odom);
             }
         });
     }

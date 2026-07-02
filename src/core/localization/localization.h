@@ -58,6 +58,8 @@ class Localization : public ILocalizationRuntime {
 
     void FeedImu(IMUPtr imu) override { ProcessIMUMsg(imu); }
     void FeedCloud(const SensorCloudInput& cloud) override { ProcessCloud(cloud); }
+    void FeedGnss(const domain::sensor::GnssData& gnss) override;
+    void FeedOdometry(const domain::sensor::OdometryData& odom) override;
     void SetInitialPose(const SE3& pose) override { SetExternalPose(pose.unit_quaternion(), pose.translation()); }
     void Finish() override;
     void SetTFCallback(TFCallback callback) override;

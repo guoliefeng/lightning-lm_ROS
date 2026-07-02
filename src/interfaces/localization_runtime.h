@@ -29,6 +29,8 @@ class ILocalizationRuntime {
     virtual bool Init(const std::string& yaml_path, const std::string& global_map_path) = 0;
     virtual void FeedImu(IMUPtr imu) = 0;
     virtual void FeedCloud(const SensorCloudInput& cloud) = 0;
+    virtual void FeedGnss(const domain::sensor::GnssData&) {}
+    virtual void FeedOdometry(const domain::sensor::OdometryData&) {}
     virtual void SetInitialPose(const SE3& pose) = 0;
     virtual void Finish() = 0;
 

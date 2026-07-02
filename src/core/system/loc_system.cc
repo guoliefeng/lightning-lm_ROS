@@ -57,6 +57,29 @@ bool LocSystem::Init(const std::string &yaml_path) {
             Timer::Evaluate([&]() { ProcessLidar(cloud); }, "Proc Lidar", true);
         });
 
+    /// GNSS / 轮速为可选配置项，缺省不订阅
+    try {
+        gnss_topic_ = yaml.GetValue<std::string>("common", "gnss_topic");
+    } catch (...) {
+        gnss_topic_.clear();
+    }
+    try {
+        odom_topic_ = yaml.GetValue<std::string>("common", "odom_topic");
+    } catch (...) {
+        odom_topic_.clear();
+    }
+
+    if (!gnss_topic_.empty()) {
+        gnss_sub_ = node_->subscribe<sensor_msgs::NavSatFix>(
+            gnss_topic_, 20, [this](const sensor_msgs::NavSatFix::ConstPtr& gnss) { ProcessGnss(gnss); });
+        LOG(INFO) << "subscribing gnss topic: " << gnss_topic_;
+    }
+    if (!odom_topic_.empty()) {
+        odom_sub_ = node_->subscribe<nav_msgs::Odometry>(
+            odom_topic_, 20, [this](const nav_msgs::Odometry::ConstPtr& odom) { ProcessOdometry(odom); });
+        LOG(INFO) << "subscribing odometry topic: " << odom_topic_;
+    }
+
     if (options_.pub_tf_) {
         tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>();
         loc_bridge_->SetTFCallback(
@@ -94,6 +117,18 @@ void LocSystem::ProcessLidar(const sensor_msgs::PointCloud2::ConstPtr &cloud) {
 void LocSystem::ProcessLidar(const livox_ros_driver::CustomMsg::ConstPtr &cloud) {
     if (loc_started_) {
         loc_bridge_->ProcessLivoxCloud(cloud);
+    }
+}
+
+void LocSystem::ProcessGnss(const sensor_msgs::NavSatFix::ConstPtr &gnss) {
+    if (loc_started_) {
+        loc_bridge_->ProcessGnss(gnss);
+    }
+}
+
+void LocSystem::ProcessOdometry(const nav_msgs::Odometry::ConstPtr &odom) {
+    if (loc_started_) {
+        loc_bridge_->ProcessOdometry(odom);
     }
 }
 

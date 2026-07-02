@@ -38,6 +38,18 @@ void LocalizationBridgeRos1::ProcessLivoxCloud(const livox_ros_driver::CustomMsg
     }
 }
 
+void LocalizationBridgeRos1::ProcessGnss(const sensor_msgs::NavSatFix::ConstPtr& gnss) {
+    if (runtime_) {
+        runtime_->FeedGnss(bridges::ConvertNavSatFixToGnssData(gnss));
+    }
+}
+
+void LocalizationBridgeRos1::ProcessOdometry(const nav_msgs::Odometry::ConstPtr& odom) {
+    if (runtime_) {
+        runtime_->FeedOdometry(bridges::ConvertRosOdometryToOdometryData(odom));
+    }
+}
+
 void LocalizationBridgeRos1::SetInitialPose(const SE3& pose) {
     if (runtime_) {
         runtime_->SetInitialPose(pose);

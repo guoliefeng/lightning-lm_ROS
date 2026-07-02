@@ -51,6 +51,20 @@ void Localization::ProcessIMUMsg(IMUPtr imu) {
     }
 }
 
+void Localization::FeedGnss(const domain::sensor::GnssData& gnss) {
+    UL lock(global_mutex_);
+    if (legacy_bridge_) {
+        legacy_bridge_->FeedGnss(gnss);
+    }
+}
+
+void Localization::FeedOdometry(const domain::sensor::OdometryData& odom) {
+    UL lock(global_mutex_);
+    if (legacy_bridge_) {
+        legacy_bridge_->FeedOdometry(odom);
+    }
+}
+
 void Localization::Finish() {
     if (legacy_bridge_) {
         legacy_bridge_->Finish();
