@@ -23,6 +23,7 @@ add_library(${PROJECT_NAME}.libs SHARED
         bridges/localization_bridge.cc
         bridges/localization_bridge_ros1.cc
         bridges/sensor_conversion.cc
+        bridges/tf_conversion.cc
 
         adapters/global_initializer_passthrough.cc
         adapters/laser_mapping_adapter.cc

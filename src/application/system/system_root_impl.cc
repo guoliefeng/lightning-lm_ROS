@@ -51,6 +51,7 @@ void SystemRootImpl::Shutdown() {
         trajectory_manager_.reset();
         map_state_repository_.reset();
         event_sinks_.clear();
+        map_odom_authority_.reset();
         initialized_ = false;
     }
 
@@ -195,6 +196,9 @@ std::shared_ptr<domain::contracts::ITrajectoryContext> SystemRootImpl::CreateTra
     if (!map_state_repository_) {
         map_state_repository_ = assembly.map_state_repository;
     }
+    if (!map_odom_authority_ && assembly.map_odom_authority) {
+        map_odom_authority_ = assembly.map_odom_authority;
+    }
     trajectory::TrajectoryContextImpl::Options context_options;
     context_options.id = trajectory_id;
     context_options.config_path = options_.config_path;
@@ -210,6 +214,11 @@ std::shared_ptr<domain::contracts::ITrajectoryContext> SystemRootImpl::CreateTra
         return nullptr;
     }
     return context;
+}
+
+std::shared_ptr<domain::contracts::IMapOdomAuthority> SystemRootImpl::GetMapOdomAuthority() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return map_odom_authority_;
 }
 
 }  // namespace lightning::application::system

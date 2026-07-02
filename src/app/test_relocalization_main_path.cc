@@ -26,6 +26,7 @@
 #include "domain/contracts/sensor_collator.h"
 #include "domain/contracts/state_estimator.h"
 #include "domain/result/map_state.h"
+#include "domain/sensor/scan_snapshot.h"
 #include "interfaces/fusion_engine.h"
 #include "interfaces/localizer.h"
 #include "interfaces/motion_estimator.h"
@@ -394,6 +395,7 @@ bool TestCoordinatorPath() {
     auto pipeline = std::make_shared<FakeSensorPipeline>();
     auto localizer = std::make_shared<CountingLocalizer>();
     auto state_estimator = std::make_shared<CountingStateEstimator>();
+    auto pose_graph_backend = std::make_shared<CountingPoseGraphBackend>();
     auto event_sink = std::make_shared<CountingEventSink>();
     auto global_initializer = std::make_shared<SuccessGlobalInitializer>();
     auto local_tracker = std::make_shared<SuccessLocalTracker>();
@@ -409,6 +411,7 @@ bool TestCoordinatorPath() {
     assembly.sensor_pipeline = pipeline;
     assembly.localizer = localizer;
     assembly.state_estimator = state_estimator;
+    assembly.pose_graph_backend = pose_graph_backend;
     assembly.relocalization_coordinator = coordinator;
 
     application::trajectory::TrajectoryContextImpl::Options options;
@@ -423,6 +426,8 @@ bool TestCoordinatorPath() {
     ok &= Check(localizer->process_count == 0, "legacy localizer was called despite coordinator availability");
     ok &= Check(state_estimator->localization_count == 1, "state estimator did not receive coordinator result");
     ok &= Check(event_sink->localization_count == 1, "event sink did not receive coordinator result");
+    ok &= Check(pose_graph_backend->localization_count == 1,
+                "pose graph backend did not receive coordinator localization");
     ok &= Check(event_sink->cloud_in_world_count == 1, "cloud-in-world visualization event was not emitted");
     ok &= Check(map_odom_authority->update_count == 1, "map->odom authority was not updated");
     ok &= Check(context.GetLatestLocalizationResult().valid, "latest localization result was not updated");
@@ -552,7 +557,41 @@ bool TestLegacyFusionAndPoseGraphBothReceiveRuntimeData() {
     ok &= Check(pose_graph_backend->localization_count == 1,
                 "pose graph backend did not receive localization when legacy fusion existed");
     ok &= Check(event_sink->localization_count == 1,
-                "pose graph output callback did not publish localization event");
+                "expected exactly one localization event on fallback path, got " +
+                    std::to_string(event_sink->localization_count));
+    return ok;
+}
+
+bool TestMapOdomAuthorityFreeze() {
+    auto map_odom_authority = std::make_shared<CountingMapOdomAuthority>();
+    auto global_initializer = std::make_shared<SuccessGlobalInitializer>();
+    auto local_tracker = std::make_shared<SuccessLocalTracker>();
+
+    application::system::RelocalizationCoordinator::Options coordinator_options;
+    coordinator_options.min_accumulated_scans = 1;
+    coordinator_options.min_accumulated_points = 1;
+    auto coordinator = std::make_shared<application::system::RelocalizationCoordinator>(
+        coordinator_options, global_initializer, local_tracker, map_odom_authority);
+
+    domain::sensor::ScanSnapshot snapshot;
+    snapshot.registered_scan.points.push_back(domain::sensor::CloudPoint{1.0f, 2.0f, 3.0f});
+    snapshot.has_odom_pose_hint = true;
+    snapshot.odom_pose_hint.translation = Eigen::Vector3d(1.0, 0.0, 0.0);
+
+    coordinator->ProcessScan(snapshot);
+    const auto before_freeze = map_odom_authority->GetMapToOdom();
+
+    map_odom_authority->Freeze();
+    snapshot.odom_pose_hint.translation = Eigen::Vector3d(9.0, 9.0, 9.0);
+    coordinator->ProcessScan(snapshot);
+    const auto after_freeze = map_odom_authority->GetMapToOdom();
+
+    bool ok = true;
+    ok &= Check(map_odom_authority->IsFrozen(), "map odom authority was not frozen");
+    ok &= Check(before_freeze.translation.isApprox(after_freeze.translation),
+                "map->odom translation changed after freeze");
+    ok &= Check(before_freeze.rotation.coeffs().isApprox(after_freeze.rotation.coeffs()),
+                "map->odom rotation changed after freeze");
     return ok;
 }
 
@@ -566,6 +605,7 @@ int main() {
     ok &= lightning::TestLegacyFallbackPath();
     ok &= lightning::TestAssemblerAllowsBackendWithoutLegacyFusionCompatibility();
     ok &= lightning::TestLegacyFusionAndPoseGraphBothReceiveRuntimeData();
+    ok &= lightning::TestMapOdomAuthorityFreeze();
     if (!ok) {
         return EXIT_FAILURE;
     }

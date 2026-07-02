@@ -165,6 +165,7 @@ bool TrajectoryContextImpl::ProcessKeyframeScanWithCoordinator(const CloudPtr& c
 
     const auto result = relocalization_coordinator_->GetLatestLocalizationResult();
     HandleLocalizationResult(cloud, result, true);
+    FeedLocalizationToBackends(nullptr, result, false);
     return true;
 }
 
@@ -176,8 +177,8 @@ void TrajectoryContextImpl::ProcessKeyframeScanLegacyFallback(const CloudPtr& cl
     localizer_->ProcessKeyframeScan(cloud);
     const auto legacy_result = localizer_->GetLocalizationResult();
     const auto result = legacy::ToLocalizationResult(legacy_result);
-    HandleLocalizationResult(cloud, result, false);
-    FeedLocalizationToBackends(&legacy_result, result, true);
+    HandleLocalizationResult(cloud, result, true);
+    FeedLocalizationToBackends(&legacy_result, result, false);
 }
 
 domain::sensor::ScanSnapshot TrajectoryContextImpl::BuildScanSnapshotFromKeyframe(const CloudPtr& cloud) const {
@@ -365,15 +366,8 @@ void TrajectoryContextImpl::WireTrajectoryFlow() {
 
     if (pose_graph_backend_) {
         pose_graph_backend_->SetOutputCallback([this](const domain::result::LocalizationResult& result) {
-            std::shared_ptr<domain::contracts::IEventSink> sink;
-            {
-                UL lock(mutex_);
-                latest_localization_result_ = result;
-                sink = event_sink_;
-            }
-            if (sink) {
-                sink->OnLocalizationResult(result);
-            }
+            UL lock(mutex_);
+            latest_localization_result_ = result;
         });
     }
 }

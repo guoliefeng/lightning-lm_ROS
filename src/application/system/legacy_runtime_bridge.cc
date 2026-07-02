@@ -5,7 +5,10 @@
 #include <glog/logging.h>
 
 #include "application/trajectory/trajectory_legacy_conversion.h"
+#include "application/system/system_root_impl.h"
+#include "bridges/tf_conversion.h"
 #include "domain/contracts/event_sink.h"
+#include "domain/contracts/map_odom_authority.h"
 #include "domain/contracts/system_root.h"
 #include "domain/result/map_state.h"
 #include "domain/result/motion_estimate.h"
@@ -54,7 +57,11 @@ class LegacyRuntimeBridge::BridgeEventSink : public domain::contracts::IEventSin
    public:
     explicit BridgeEventSink(LegacyRuntimeBridge* bridge) : bridge_(bridge) {}
 
-    void OnMotionEstimate(const domain::result::MotionEstimate&) override {}
+    void OnMotionEstimate(const domain::result::MotionEstimate& estimate) override {
+        if (bridge_) {
+            bridge_->HandleMotionEstimate(estimate);
+        }
+    }
 
     void OnStateEstimate(const domain::result::StateEstimate& estimate) override {
         if (bridge_) {
@@ -133,6 +140,11 @@ bool LegacyRuntimeBridge::Init(const std::string& yaml_path) {
     if (!system_root_->Start()) {
         return false;
     }
+
+    if (auto* root_impl = dynamic_cast<SystemRootImpl*>(system_root_.get())) {
+        map_odom_authority_ = root_impl->GetMapOdomAuthority();
+    }
+
     initialized_ = true;
     return true;
 }
@@ -152,6 +164,9 @@ void LegacyRuntimeBridge::Finish() {
     owns_ui_ = false;
 
     latest_localization_result_ = loc::LocalizationResult();
+    latest_motion_pose_ = domain::geometry::Pose3::Identity();
+    has_motion_pose_ = false;
+    map_odom_authority_.reset();
     last_imu_time_ = 0.0;
     last_cloud_time_ = 0.0;
     initialized_ = false;
@@ -232,9 +247,7 @@ void LegacyRuntimeBridge::HandleLocalizationResult(const domain::result::Localiz
 
     latest_localization_result_ = ToLegacyLocalizationResult(result);
 
-    if (tf_callback_ && latest_localization_result_.valid_) {
-        tf_callback_(latest_localization_result_.ToGeoMsg());
-    }
+    PublishSplitTf(result.timestamp_s);
 
     if (ui_) {
         ui_->UpdateNavState(latest_localization_result_.ToNavState());
@@ -247,6 +260,26 @@ void LegacyRuntimeBridge::HandleLocalizationResult(const domain::result::Localiz
         LOG(INFO) << "loc_state: " << loc_state.data;
         loc_state_callback_(loc_state);
     }
+}
+
+void LegacyRuntimeBridge::HandleMotionEstimate(const domain::result::MotionEstimate& estimate) {
+    if (!estimate.valid) {
+        return;
+    }
+
+    latest_motion_pose_ = estimate.pose;
+    has_motion_pose_ = true;
+    PublishSplitTf(estimate.timestamp_s);
+}
+
+void LegacyRuntimeBridge::PublishSplitTf(double timestamp_s) {
+    if (!tf_callback_ || !map_odom_authority_ || !has_motion_pose_) {
+        return;
+    }
+
+    const auto map_to_odom = map_odom_authority_->GetMapToOdom();
+    tf_callback_(loc::bridges::ToTransformStamped(map_to_odom, "map", "odom", timestamp_s));
+    tf_callback_(loc::bridges::ToTransformStamped(latest_motion_pose_, "odom", "base_link", timestamp_s));
 }
 
 void LegacyRuntimeBridge::HandleStateEstimate(const domain::result::StateEstimate&) {}

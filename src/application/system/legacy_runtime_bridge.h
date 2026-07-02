@@ -4,6 +4,7 @@
 #include <string>
 
 #include "core/localization/localization_result.h"
+#include "domain/geometry/pose3.h"
 #include "interfaces/localization_runtime.h"
 
 namespace lightning::ui {
@@ -29,8 +30,13 @@ struct Pose3;
 
 namespace lightning::domain::contracts {
 class IEventSink;
+class IMapOdomAuthority;
 class ISystemRoot;
 }  // namespace lightning::domain::contracts
+
+namespace lightning::domain::result {
+struct MotionEstimate;
+}
 
 namespace lightning::application::system {
 
@@ -60,10 +66,13 @@ class LegacyRuntimeBridge {
     class BridgeEventSink;
 
     void HandleLocalizationResult(const domain::result::LocalizationResult& result);
+    void HandleMotionEstimate(const domain::result::MotionEstimate& estimate);
     void HandleStateEstimate(const domain::result::StateEstimate& estimate);
     void HandleCloudInWorld(const domain::sensor::CloudData& cloud, const domain::geometry::Pose3& pose);
+    void PublishSplitTf(double timestamp_s);
 
     std::shared_ptr<domain::contracts::ISystemRoot> system_root_ = nullptr;
+    std::shared_ptr<domain::contracts::IMapOdomAuthority> map_odom_authority_ = nullptr;
     std::string trajectory_id_;
     std::unique_ptr<trajectory::legacy::LegacyCloudConverter> cloud_converter_;
     std::shared_ptr<BridgeEventSink> event_sink_;
@@ -73,6 +82,8 @@ class LegacyRuntimeBridge {
     TFCallback tf_callback_;
     LocStateCallback loc_state_callback_;
     loc::LocalizationResult latest_localization_result_;
+    domain::geometry::Pose3 latest_motion_pose_ = domain::geometry::Pose3::Identity();
+    bool has_motion_pose_ = false;
 
     double last_imu_time_ = 0.0;
     double last_cloud_time_ = 0.0;

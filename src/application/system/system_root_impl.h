@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "domain/contracts/map_odom_authority.h"
 #include "domain/contracts/plugin_registry.h"
 #include "domain/contracts/map_state_repository.h"
 #include "domain/contracts/system_root.h"
@@ -50,6 +51,8 @@ class SystemRootImpl : public domain::contracts::ISystemRoot {
     bool FeedCloud(const std::string& trajectory_id, const domain::sensor::CloudData& cloud) override;
     bool SetInitialPose(const std::string& trajectory_id, const domain::geometry::Pose3& pose) override;
 
+    std::shared_ptr<domain::contracts::IMapOdomAuthority> GetMapOdomAuthority() const;
+
    private:
     std::shared_ptr<domain::contracts::ITrajectoryContext> FindTrajectoryLocked(const std::string& trajectory_id) const;
     std::shared_ptr<domain::contracts::ITrajectoryContext> CreateTrajectoryContext(const std::string& trajectory_id);
@@ -62,6 +65,7 @@ class SystemRootImpl : public domain::contracts::ISystemRoot {
     std::shared_ptr<domain::contracts::ITrajectoryManager> trajectory_manager_ = nullptr;
     std::shared_ptr<domain::contracts::IPluginRegistry> plugin_registry_ = nullptr;
     std::shared_ptr<domain::contracts::IMapStateRepository> map_state_repository_ = nullptr;
+    std::shared_ptr<domain::contracts::IMapOdomAuthority> map_odom_authority_ = nullptr;
     std::unordered_map<std::string, std::shared_ptr<domain::contracts::IEventSink>> event_sinks_;
 };
 
