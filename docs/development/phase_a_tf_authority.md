@@ -49,11 +49,11 @@
 - legacy fallback：`HandleLocalizationResult(..., true)` 统一由主路径发事件；`FeedLocalizationToBackends(..., false)` 避免二次发布
 - PGO `SetOutputCallback` 仅更新 `latest_localization_result_`，不再 `OnLocalizationResult` 双写
 
-### 2.3 Sprint 2 — NDT 初始化限流
+### 2.3 Sprint 2 — NDT 初始化限流（**已于 Sprint 3 回退**）
 
 | 文件 | 改动 |
 |------|------|
-| `lidar_loc.cc` | `YawSearch` 将 yaw 候选数上限为 24（配置 60 时打日志并截断） |
+| `lidar_loc.cc` | ~~`YawSearch` 将 yaw 候选数上限为 24~~ 已回退：15° 角分辨率超出 NDT 收敛域，导致外部初值初始化失败（见 [Sprint 3 开发记录](sprint3_sensor_channels.md) 第 3 节） |
 
 ---
 

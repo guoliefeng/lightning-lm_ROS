@@ -20,7 +20,7 @@
 
 1. **Legacy 隧道**：collator 之后立即转回 `IMUPtr/CloudPtr/NavState`，domain 契约与热路径实现脱节。
 2. **map→odom 权威已接 TF**：`LegacyRuntimeBridge` 通过 `IMapOdomAuthority` 发 `map→odom`，`MotionEstimate` 发 `odom→base_link`（2026-07-02 Phase A）。
-3. **传感器面过窄**：`ISystemRoot` 仅 `FeedImu/FeedCloud`，GNSS/轮速/INS 未进主路径。
+3. **传感器通路已通、融合未做**：GNSS/轮速已有 domain 通道进 `IStateEstimator`（2026-07-02 Sprint 3），但仍是 pass-through 记录，无融合算法。
 4. **建图与定位双轨**：`SlamSystem` 绕过新架构；地图经离线工具与定位衔接。
 5. **PGO 平滑未回写 UI/TF**：coordinator 发事件，PGO 仅内部消费（双写已消除）。
 
@@ -31,8 +31,10 @@
 | 在线建图 50s | 通过（`run_slam_online` + qc bag） |
 | 地图切块 | `map_0623-1730.pcd` → 73 chunks（`run_map_chunker`） |
 | 在线定位 50s | 通过（INS 初值；`No point` 仅启动 2 次；NDT 置信度 1.3~2.6） |
-| Phase A 单测 | `test_relocalization_main_path` 全部通过（含 Freeze / PGO feed） |
+| Phase A 单测 | `test_relocalization_main_path` 全部通过（含 Freeze / PGO feed / GNSS 通道） |
 | TF 双链路 | bag 播放期间 `/tf` 同时发布 `map→odom` 与 `odom→base_link`（详见 [testing/phase_a_test_report.md](testing/phase_a_test_report.md)） |
+| GNSS/轮速通道 | 通过（60s ≈6000 条 GNSS + ≈5500 条 INS 里程计进状态估计器） |
+| 精度评估（60s 含运动段） | **不通过**：地图系与 INS 系错位 + QC 场景 LIO 运动后发散（详见 [testing/sprint3_accuracy_test_report.md](testing/sprint3_accuracy_test_report.md)） |
 | 已修复 bug | `ToLegacyCloud` 未回填 `header.stamp`；外部初值未 `LoadOnPose` |
 
 配置：`config/yangpu_qc.yaml`（meta_cloud + INS IMU + yangpu 地图路径）。
