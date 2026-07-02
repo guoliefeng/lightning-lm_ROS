@@ -249,7 +249,12 @@ bool LidarLoc::YawSearch(SE3& pose, double& confidence, CloudPtr input, CloudPtr
     confidence = 0;
     bool yaw_search_success = false;
 
-    int step = lidar_loc::grid_search_angle_step;
+    constexpr int kMaxYawSearchCandidates = 24;
+    const int configured_step = lidar_loc::grid_search_angle_step;
+    const int step = std::min(configured_step, kMaxYawSearchCandidates);
+    if (step < configured_step) {
+        LOG(INFO) << "capping yaw search candidates from " << configured_step << " to " << step;
+    }
     double radius = lidar_loc::grid_search_angle_range * constant::kDEG2RAD;
     double angle_search_step = 2 * radius / step;
 
@@ -498,6 +503,12 @@ void LidarLoc::Align(const CloudPtr& input) {
 
         if (initial_pose_set_) {
             /// 尝试在给定点初始化
+            /// 必须先加载初始位姿附近的地图块并同步重建 NDT target，
+            /// 否则 loaded_chunks_ 为空，NDT 概率恒为 0，外部初始位姿永远无法初始化成功
+            if (dynamic_map_manager_) {
+                dynamic_map_manager_->LoadOnPose(initial_pose_);
+                dynamic_map_manager_->RebuildTargetIfNeeded();
+            }
             if (InitWithFP(input, initial_pose_)) {
                 LOG(INFO) << "init with external pose: " << initial_pose_.translation().transpose();
                 initial_pose_set_ = false;
