@@ -10,6 +10,13 @@
 #include "wrapper/ros_utils.h"
 
 DEFINE_string(config, "./config/default.yaml", "配置文件");
+DEFINE_double(init_x, 0.0, "初始位姿 x (map)");
+DEFINE_double(init_y, 0.0, "初始位姿 y (map)");
+DEFINE_double(init_z, 0.0, "初始位姿 z (map)");
+DEFINE_double(init_qx, 0.0, "初始姿态四元数 x");
+DEFINE_double(init_qy, 0.0, "初始姿态四元数 y");
+DEFINE_double(init_qz, 0.0, "初始姿态四元数 z");
+DEFINE_double(init_qw, 1.0, "初始姿态四元数 w");
 
 /// 运行定位的测试
 int main(int argc, char** argv) {
@@ -29,8 +36,10 @@ int main(int argc, char** argv) {
         LOG(ERROR) << "failed to init loc";
     }
 
-    /// 默认起点开始定位
-    loc.SetInitPose(SE3());
+    /// 从命令行指定初始位姿（默认原点）
+    Eigen::Quaterniond init_q(FLAGS_init_qw, FLAGS_init_qx, FLAGS_init_qy, FLAGS_init_qz);
+    init_q.normalize();
+    loc.SetInitPose(SE3(init_q, Vec3d(FLAGS_init_x, FLAGS_init_y, FLAGS_init_z)));
     loc.Spin();
 
     ros::shutdown();

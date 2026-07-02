@@ -165,6 +165,9 @@ SensorCloudInput ToLegacyCloud(const domain::sensor::CloudData& cloud) {
     SensorCloudInput converted;
     converted.stamp_ns = cloud.stamp_ns;
     converted.cloud.reset(new PointCloudType());
+    // legacy 管线（LaserMapping/LidarLoc）通过 math::ToSec(header.stamp) 读取纳秒时间戳，
+    // 不回填会导致 LIO 的 IMU/点云同步永远失败
+    converted.cloud->header.stamp = cloud.stamp_ns;
     converted.cloud->reserve(cloud.points.size());
     for (const auto& point : cloud.points) {
         PointType converted_point;
