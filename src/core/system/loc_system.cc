@@ -35,6 +35,12 @@ bool LocSystem::Init(const std::string &yaml_path) {
     cloud_topic_ = yaml.GetValue<std::string>("common", "lidar_topic");
     livox_topic_ = yaml.GetValue<std::string>("common", "livox_lidar_topic");
 
+    YAML::Node yaml_node = YAML::LoadFile(yaml_path);
+    if (yaml_node["common"] && yaml_node["common"]["init_pose_topic"]) {
+        init_pose_topic_ = yaml_node["common"]["init_pose_topic"].as<std::string>();
+        use_init_pose_topic_ = !init_pose_topic_.empty();
+    }
+
     imu_sub_ = node_->subscribe<sensor_msgs::Imu>(
         imu_topic_, 10, [this](const sensor_msgs::Imu::ConstPtr& msg) {
             IMUPtr imu = std::make_shared<IMU>();
@@ -56,6 +62,12 @@ bool LocSystem::Init(const std::string &yaml_path) {
             Timer::Evaluate([&]() { ProcessLidar(cloud); }, "Proc Lidar", true);
         });
 
+    if (use_init_pose_topic_) {
+        init_pose_sub_ = node_->subscribe<nav_msgs::Odometry>(
+            init_pose_topic_, 10, [this](const nav_msgs::Odometry::ConstPtr& odom) { ProcessInitPose(odom); });
+        LOG(INFO) << "waiting init pose from " << init_pose_topic_;
+    }
+
     if (options_.pub_tf_) {
         tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>();
         loc_->SetTFCallback(
@@ -76,6 +88,24 @@ void LocSystem::SetInitPose(const SE3 &pose) {
 
     loc_->SetExternalPose(pose.unit_quaternion(), pose.translation());
     loc_started_ = true;
+}
+
+void LocSystem::ProcessInitPose(const nav_msgs::Odometry::ConstPtr &odom) {
+    if (loc_started_) {
+        return;
+    }
+
+    const auto &p = odom->pose.pose.position;
+    const auto &q = odom->pose.pose.orientation;
+    Quatd quat(q.w, q.x, q.y, q.z);
+    if (quat.norm() < 1e-6) {
+        LOG(ERROR) << "invalid init pose quaternion from " << init_pose_topic_;
+        return;
+    }
+
+    quat.normalize();
+    SetInitPose(SE3(quat, Vec3d(p.x, p.y, p.z)));
+    init_pose_sub_.shutdown();
 }
 
 void LocSystem::ProcessIMU(const IMUPtr &imu) {

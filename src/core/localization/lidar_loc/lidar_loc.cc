@@ -72,6 +72,11 @@ bool LidarLoc::Init(const std::string& config_path) {
     options_.enable_parking_static_ = yaml.GetValue<bool>("lidar_loc", "enable_parking_static");
     options_.enable_icp_adjust_ = yaml.GetValue<bool>("lidar_loc", "enable_icp_adjust");
 
+    YAML::Node yaml_node = YAML::LoadFile(config_path);
+    if (yaml_node["lidar_loc"] && yaml_node["lidar_loc"]["trust_initial_pose"]) {
+        options_.trust_initial_pose_ = yaml_node["lidar_loc"]["trust_initial_pose"].as<bool>();
+    }
+
     lidar_loc::grid_search_angle_step = yaml.GetValue<double>("lidar_loc", "grid_search_angle_step");
     lidar_loc::grid_search_angle_range = yaml.GetValue<double>("lidar_loc", "grid_search_angle_range");
 
@@ -473,6 +478,27 @@ void LidarLoc::Align(const CloudPtr& input) {
         SetInitRltState();
 
         if (initial_pose_set_) {
+            if (options_.trust_initial_pose_) {
+                loc_inited_ = true;
+                current_abs_pose_ = initial_pose_;
+                last_abs_pose_ = initial_pose_;
+                last_abs_pose_set_ = true;
+                current_score_ = options_.min_init_confidence_;
+
+                localization_result_.timestamp_ = current_timestamp_;
+                localization_result_.confidence_ = current_score_;
+                localization_result_.pose_ = initial_pose_;
+                localization_result_.valid_ = true;
+                localization_result_.lidar_loc_valid_ = true;
+                localization_result_.status_ = LocalizationStatus::GOOD;
+
+                map_->LoadOnPose(initial_pose_);
+                fp_init_fail_pose_vec_.clear();
+                initial_pose_set_ = false;
+                LOG(INFO) << "init with trusted external pose: " << current_abs_pose_.translation().transpose();
+                return;
+            }
+
             /// 尝试在给定点初始化
             if (InitWithFP(input, initial_pose_)) {
                 LOG(INFO) << "init with external pose: " << initial_pose_.translation().transpose();
