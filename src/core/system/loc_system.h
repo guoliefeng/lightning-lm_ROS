@@ -67,6 +67,7 @@ class LocSystem {
     std::string livox_topic_;
     std::string init_pose_topic_;
     bool use_init_pose_topic_ = false;
+    Mat3d imu_to_base_rotation_ = Mat3d::Identity();
 
     ros::Subscriber imu_sub_;
     ros::Subscriber cloud_sub_;

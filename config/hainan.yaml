@@ -5,6 +5,10 @@ common:
   livox_lidar_topic: "/livox/lidar"
   imu_topic: "/ins_driver/imu"
   init_pose_topic: "/localization/ins"
+  # IMU Y points forward. Convert IMU vectors to ROS base_link (x forward, y left, z up).
+  imu_to_base_rotation: [ 0,  1, 0,
+                         -1,  0, 0,
+                          0,  0, 1 ]
 
 # fasterlio 参数
 fasterlio:
@@ -57,7 +61,7 @@ system:
   enable_lidar_odom_skip: false
   lidar_loc_skip_num: 4
   lidar_odom_skip_num: 2
-  map_path: /home/guoli/data/yangpu/Map  #\home\guoli\data\yangpu\Map
+  map_path: /home/guoli/data/yangpu/old_Map  #\home\guoli\data\yangpu\Map
   pub_tf: true
 
 loop_closing:
@@ -83,7 +87,7 @@ lidar_loc:
   lidar_loc_odom_th: 0.5
   init_with_fp: true
   trust_initial_pose: true
-  min_init_confidence: 1.8
+  min_init_confidence: 1.5
   update_dynamic_cloud: true
   update_err_h: 0.2
   update_err_v: 0.2

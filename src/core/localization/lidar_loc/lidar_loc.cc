@@ -492,10 +492,28 @@ void LidarLoc::Align(const CloudPtr& input) {
                 localization_result_.lidar_loc_valid_ = true;
                 localization_result_.status_ = LocalizationStatus::GOOD;
 
+                if (current_lo_pose_set_) {
+                    last_lo_pose_ = current_lo_pose_;
+                    last_lo_pose_set_ = true;
+                } else {
+                    last_lo_pose_set_ = false;
+                }
+                if (current_dr_pose_set_) {
+                    last_dr_pose_ = current_dr_pose_;
+                    last_dr_pose_set_ = true;
+                } else {
+                    last_dr_pose_set_ = false;
+                }
+                last_timestamp_ = current_timestamp_;
+                lidar_loc_pose_queue_.clear();
+                lidar_loc_pose_queue_.emplace_back(current_timestamp_, initial_pose_);
+
                 map_->LoadOnPose(initial_pose_);
                 fp_init_fail_pose_vec_.clear();
                 initial_pose_set_ = false;
-                LOG(INFO) << "init with trusted external pose: " << current_abs_pose_.translation().transpose();
+                LOG(INFO) << "init with trusted external pose: " << current_abs_pose_.translation().transpose()
+                          << ", LO baseline: " << last_lo_pose_set_
+                          << ", DR baseline: " << last_dr_pose_set_;
                 return;
             }
 
