@@ -165,6 +165,7 @@ SensorCloudInput ToLegacyCloud(const domain::sensor::CloudData& cloud) {
     SensorCloudInput converted;
     converted.stamp_ns = cloud.stamp_ns;
     converted.cloud.reset(new PointCloudType());
+    converted.cloud->header.stamp = cloud.stamp_ns;
     converted.cloud->reserve(cloud.points.size());
     for (const auto& point : cloud.points) {
         PointType converted_point;
@@ -175,6 +176,8 @@ SensorCloudInput ToLegacyCloud(const domain::sensor::CloudData& cloud) {
         converted_point.time = point.relative_time_s;
         converted.cloud->push_back(converted_point);
     }
+    converted.cloud->width = converted.cloud->size();
+    converted.cloud->height = 1;
     converted.cloud->is_dense = cloud.is_dense;
     return converted;
 }

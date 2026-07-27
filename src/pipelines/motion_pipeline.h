@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <memory>
 
 #include "core/lio/pointcloud_preprocess.h"
@@ -39,6 +40,7 @@ class MotionPipeline : public ISensorPipeline {
     std::shared_ptr<IMotionEstimator> motion_estimator_ = nullptr;
     std::shared_ptr<PointCloudPreprocess> preprocess_ = nullptr;
     Keyframe::Ptr last_keyframe_ = nullptr;
+    double last_dead_reckoning_timestamp_ = -std::numeric_limits<double>::infinity();
 
     DeadReckoningCallback dead_reckoning_callback_;
     LidarOdomCallback lidar_odom_callback_;

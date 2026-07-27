@@ -10,6 +10,7 @@
 #include "application/system/relocalization_coordinator.h"
 #include "application/system/system_assembler.h"
 #include "application/trajectory/trajectory_context_impl.h"
+#include "application/trajectory/trajectory_legacy_conversion.h"
 #include "common/eigen_types.h"
 #include "common/imu.h"
 #include "common/nav_state.h"
@@ -30,6 +31,7 @@
 #include "interfaces/localizer.h"
 #include "interfaces/motion_estimator.h"
 #include "interfaces/sensor_pipeline.h"
+#include "pipelines/motion_pipeline.h"
 
 namespace lightning {
 namespace {
@@ -78,10 +80,12 @@ class FakeMotionEstimator : public loc::IMotionEstimator {
     void ProcessCloud(CloudPtr) override {}
     bool Run() override { return true; }
     NavState GetLidarOdomState() const override { return NavState(); }
-    NavState GetDeadReckoningState() const override { return NavState(); }
+    NavState GetDeadReckoningState() const override { return dead_reckoning_state; }
     Keyframe::Ptr GetKeyframe() const override { return nullptr; }
     CloudPtr GetUndistortedScan() const override { return nullptr; }
     CloudPtr GetProjectedCloud() const override { return nullptr; }
+
+    NavState dead_reckoning_state;
 };
 
 class CountingLocalizer : public loc::ILocalizer {
@@ -148,6 +152,48 @@ class CountingFusionEngine : public loc::IFusionEngine {
     int lidar_odom_count = 0;
     int localization_count = 0;
     OutputCallback callback;
+};
+
+class CountingCombinedBackend : public loc::IFusionEngine,
+                                public domain::contracts::IPoseGraphBackend {
+   public:
+    void FeedDeadReckoning(const NavState&) override { ++legacy_motion_count; }
+    void FeedLidarOdom(const NavState&) override { ++legacy_motion_count; }
+    void FeedLocalization(const loc::LocalizationResult&) override { ++legacy_localization_count; }
+    void SetHighFrequencyOutputCallback(loc::IFusionEngine::OutputCallback cb) override {
+        legacy_callback = std::move(cb);
+    }
+
+    void FeedMotionEstimate(const domain::result::MotionEstimate& motion) override {
+        ++domain_motion_count;
+        latest_motion = motion;
+    }
+    void FeedLocalizationResult(const domain::result::LocalizationResult& localization) override {
+        ++domain_localization_count;
+        latest_localization = localization;
+        if (domain_callback) {
+            domain_callback(localization);
+        }
+    }
+    void SetOutputCallback(domain::contracts::IPoseGraphBackend::OutputCallback cb) override {
+        domain_callback = std::move(cb);
+    }
+    domain::result::LocalizationResult GetLatestResult() const override {
+        return latest_localization;
+    }
+    void Reset() override {
+        latest_motion = domain::result::MotionEstimate();
+        latest_localization = domain::result::LocalizationResult();
+    }
+
+    int legacy_motion_count = 0;
+    int legacy_localization_count = 0;
+    int domain_motion_count = 0;
+    int domain_localization_count = 0;
+    domain::result::MotionEstimate latest_motion;
+    domain::result::LocalizationResult latest_localization;
+    loc::IFusionEngine::OutputCallback legacy_callback;
+    domain::contracts::IPoseGraphBackend::OutputCallback domain_callback;
 };
 
 class CountingStateEstimator : public domain::contracts::IStateEstimator {
@@ -398,6 +444,7 @@ bool TestCoordinatorPath() {
     auto global_initializer = std::make_shared<SuccessGlobalInitializer>();
     auto local_tracker = std::make_shared<SuccessLocalTracker>();
     auto map_odom_authority = std::make_shared<CountingMapOdomAuthority>();
+    auto pose_graph_backend = std::make_shared<CountingPoseGraphBackend>();
 
     application::system::RelocalizationCoordinator::Options coordinator_options;
     coordinator_options.min_accumulated_scans = 1;
@@ -409,6 +456,7 @@ bool TestCoordinatorPath() {
     assembly.sensor_pipeline = pipeline;
     assembly.localizer = localizer;
     assembly.state_estimator = state_estimator;
+    assembly.pose_graph_backend = pose_graph_backend;
     assembly.relocalization_coordinator = coordinator;
 
     application::trajectory::TrajectoryContextImpl::Options options;
@@ -425,6 +473,8 @@ bool TestCoordinatorPath() {
     ok &= Check(event_sink->localization_count == 1, "event sink did not receive coordinator result");
     ok &= Check(event_sink->cloud_in_world_count == 1, "cloud-in-world visualization event was not emitted");
     ok &= Check(map_odom_authority->update_count == 1, "map->odom authority was not updated");
+    ok &= Check(pose_graph_backend->localization_count == 1,
+                "coordinator result was not sent to the pose graph backend");
     ok &= Check(context.GetLatestLocalizationResult().valid, "latest localization result was not updated");
     ok &= Check(global_initializer->latest_snapshot.source_id == "coordinator_path",
                 "scan snapshot source_id was not populated");
@@ -556,6 +606,102 @@ bool TestLegacyFusionAndPoseGraphBothReceiveRuntimeData() {
     return ok;
 }
 
+bool TestSharedFusionAndPoseGraphBackendReceivesRuntimeDataOnce() {
+    auto pipeline = std::make_shared<FakeSensorPipeline>();
+    auto localizer = std::make_shared<CountingLocalizer>();
+    auto state_estimator = std::make_shared<CountingStateEstimator>();
+    auto combined_backend = std::make_shared<CountingCombinedBackend>();
+    auto event_sink = std::make_shared<CountingEventSink>();
+
+    application::system::LocalizationAssembly assembly;
+    assembly.sensor_pipeline = pipeline;
+    assembly.localizer = localizer;
+    assembly.state_estimator = state_estimator;
+    assembly.pose_graph_backend = combined_backend;
+    assembly.legacy_fusion_engine = combined_backend;
+
+    application::trajectory::TrajectoryContextImpl::Options options;
+    options.id = "shared_backend";
+    application::trajectory::TrajectoryContextImpl context(options, std::move(assembly));
+    context.SetEventSink(event_sink);
+
+    pipeline->dead_reckoning_callback(MakeNavState(1.0));
+    pipeline->lidar_odom_callback(MakeNavState(2.0));
+    pipeline->keyframe_scan_callback(MakeCloud());
+
+    bool ok = true;
+    ok &= Check(combined_backend->domain_motion_count == 2,
+                "shared backend did not receive both domain motion estimates");
+    ok &= Check(combined_backend->legacy_motion_count == 0,
+                "shared backend received duplicate legacy motion estimates");
+    ok &= Check(combined_backend->domain_localization_count == 1,
+                "shared backend did not receive domain localization");
+    ok &= Check(combined_backend->legacy_localization_count == 0,
+                "shared backend received duplicate legacy localization");
+    ok &= Check(combined_backend->latest_motion.source ==
+                    domain::result::MotionEstimateSource::kLidarOdometry,
+                "shared backend lost the motion estimate source");
+    ok &= Check(event_sink->localization_count == 1,
+                "shared backend output was not published exactly once");
+    return ok;
+}
+
+bool TestLegacyCloudConversionPreservesTimestamp() {
+    domain::sensor::CloudData cloud;
+    cloud.stamp_ns = 1782101234567890000ULL;
+    cloud.is_dense = true;
+    domain::sensor::CloudPoint point;
+    point.x = 1.0f;
+    point.y = 2.0f;
+    point.z = 3.0f;
+    point.intensity = 4.0f;
+    point.relative_time_s = 5.0f;
+    cloud.points.push_back(point);
+
+    const auto converted = application::trajectory::legacy::ToLegacyCloud(cloud);
+    bool ok = true;
+    ok &= Check(converted.cloud != nullptr, "legacy cloud conversion returned null");
+    ok &= Check(converted.cloud && converted.cloud->header.stamp == cloud.stamp_ns,
+                "legacy cloud conversion dropped the sensor timestamp");
+    ok &= Check(converted.cloud && converted.cloud->width == 1 && converted.cloud->height == 1,
+                "legacy cloud conversion did not preserve organized cloud metadata");
+    return ok;
+}
+
+bool TestMotionPipelineDropsNonMonotonicDeadReckoning() {
+    auto motion_estimator = std::make_shared<FakeMotionEstimator>();
+    auto preprocess = std::make_shared<PointCloudPreprocess>();
+    loc::MotionPipeline pipeline(loc::MotionPipeline::Options(), motion_estimator, preprocess);
+
+    std::vector<double> output_timestamps;
+    pipeline.SetDeadReckoningCallback(
+        [&output_timestamps](const NavState& state) { output_timestamps.push_back(state.timestamp_); });
+
+    const auto imu = std::make_shared<IMU>();
+    for (const double timestamp : {10.0, 9.0, 10.0, 11.0}) {
+        motion_estimator->dead_reckoning_state = MakeNavState(timestamp);
+        pipeline.ProcessIMU(imu);
+    }
+
+    bool ok = true;
+    ok &= Check(output_timestamps.size() == 2,
+                "motion pipeline forwarded duplicate or regressive dead reckoning");
+    ok &= Check(output_timestamps.size() == 2 && output_timestamps[0] == 10.0 &&
+                    output_timestamps[1] == 11.0,
+                "motion pipeline did not preserve strictly increasing dead reckoning");
+    return ok;
+}
+
+bool TestNavStateIntegratesVelocity() {
+    NavState state;
+    NavState::FullVectState derivative = NavState::FullVectState::Zero();
+    derivative.segment<3>(12) = Vec3d(1.0, 2.0, 3.0);
+
+    state.oplus(derivative, 0.5);
+    return Check(state.GetVel().isApprox(Vec3d(0.5, 1.0, 1.5)),
+                 "NavState propagation dropped the acceleration-derived velocity increment");
+}
+
 }  // namespace
 }  // namespace lightning
 
@@ -566,6 +712,10 @@ int main() {
     ok &= lightning::TestLegacyFallbackPath();
     ok &= lightning::TestAssemblerAllowsBackendWithoutLegacyFusionCompatibility();
     ok &= lightning::TestLegacyFusionAndPoseGraphBothReceiveRuntimeData();
+    ok &= lightning::TestSharedFusionAndPoseGraphBackendReceivesRuntimeDataOnce();
+    ok &= lightning::TestLegacyCloudConversionPreservesTimestamp();
+    ok &= lightning::TestMotionPipelineDropsNonMonotonicDeadReckoning();
+    ok &= lightning::TestNavStateIntegratesVelocity();
     if (!ok) {
         return EXIT_FAILURE;
     }

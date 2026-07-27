@@ -39,6 +39,7 @@ class LidarLoc {
         bool force_2d_ = true;                         // 强制在2D空间
         float min_init_confidence_ = 0.1;              // 初始化时要求的最小分值
         bool init_with_fp_ = true;                     // 是否使用功能点进行初始化
+        bool trust_initial_pose_ = false;              // 是否直接信任外部初始位姿
         bool enable_parking_static_ = false;           // 是否在静止时输出固定位置
         bool enable_icp_adjust_ = false;               // 是否使用icp调整ndt匹配结果提高定位精度
 

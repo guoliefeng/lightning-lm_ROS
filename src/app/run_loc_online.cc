@@ -29,8 +29,9 @@ int main(int argc, char** argv) {
         LOG(ERROR) << "failed to init loc";
     }
 
-    /// 默认起点开始定位
-    loc.SetInitPose(SE3());
+    if (!loc.NeedsExternalInitPose()) {
+        loc.SetInitPose(SE3());
+    }
     loc.Spin();
 
     ros::shutdown();

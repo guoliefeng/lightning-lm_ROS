@@ -72,6 +72,11 @@ bool LidarLoc::Init(const std::string& config_path) {
     options_.with_height_ = yaml.GetValue<bool>("loop_closing", "with_height");
     options_.try_self_extrap_ = yaml.GetValue<bool>("lidar_loc", "try_self_extrap");
 
+    const YAML::Node yaml_node = YAML::LoadFile(config_path);
+    if (yaml_node["lidar_loc"] && yaml_node["lidar_loc"]["trust_initial_pose"]) {
+        options_.trust_initial_pose_ = yaml_node["lidar_loc"]["trust_initial_pose"].as<bool>();
+    }
+
     lidar_loc::grid_search_angle_step = yaml.GetValue<double>("lidar_loc", "grid_search_angle_step");
     lidar_loc::grid_search_angle_range = yaml.GetValue<double>("lidar_loc", "grid_search_angle_range");
 
@@ -497,6 +502,51 @@ void LidarLoc::Align(const CloudPtr& input) {
         SetInitRltState();
 
         if (initial_pose_set_) {
+            if (options_.trust_initial_pose_) {
+                loc_inited_ = true;
+                current_abs_pose_ = initial_pose_;
+                last_abs_pose_ = initial_pose_;
+                last_abs_pose_set_ = true;
+                current_score_ = options_.min_init_confidence_;
+                map_height_ = initial_pose_.translation().z();
+
+                {
+                    UL lock_result(result_mutex_);
+                    localization_result_.timestamp_ = current_timestamp_;
+                    localization_result_.confidence_ = current_score_;
+                    localization_result_.pose_ = initial_pose_;
+                    localization_result_.valid_ = true;
+                    localization_result_.lidar_loc_valid_ = true;
+                    localization_result_.status_ = LocalizationStatus::GOOD;
+                }
+
+                if (current_lo_pose_set_) {
+                    last_lo_pose_ = current_lo_pose_;
+                    last_lo_pose_set_ = true;
+                } else {
+                    last_lo_pose_set_ = false;
+                }
+                if (current_dr_pose_set_) {
+                    last_dr_pose_ = current_dr_pose_;
+                    last_dr_pose_set_ = true;
+                } else {
+                    last_dr_pose_set_ = false;
+                }
+                last_timestamp_ = current_timestamp_;
+                lidar_loc_pose_queue_.clear();
+                lidar_loc_pose_queue_.emplace_back(current_timestamp_, initial_pose_);
+
+                if (dynamic_map_manager_) {
+                    dynamic_map_manager_->LoadOnPose(initial_pose_);
+                }
+                fp_init_fail_pose_vec_.clear();
+                initial_pose_set_ = false;
+                LOG(INFO) << "init with trusted external pose: " << current_abs_pose_.translation().transpose()
+                          << ", LO baseline: " << last_lo_pose_set_
+                          << ", DR baseline: " << last_dr_pose_set_;
+                return;
+            }
+
             /// 尝试在给定点初始化
             if (InitWithFP(input, initial_pose_)) {
                 LOG(INFO) << "init with external pose: " << initial_pose_.translation().transpose();

@@ -104,7 +104,20 @@ void PGOAdapter::SetHighFrequencyOutputCallback(IFusionEngine::OutputCallback cb
     impl_->SetHighFrequencyGlobalOutputHandleFunction(std::move(cb));
 }
 
-void PGOAdapter::FeedMotionEstimate(const domain::result::MotionEstimate& motion) { FeedLidarOdom(ToLegacyMotionState(motion)); }
+void PGOAdapter::FeedMotionEstimate(const domain::result::MotionEstimate& motion) {
+    const NavState state = ToLegacyMotionState(motion);
+    switch (motion.source) {
+        case domain::result::MotionEstimateSource::kDeadReckoning:
+            FeedDeadReckoning(state);
+            break;
+        case domain::result::MotionEstimateSource::kLidarOdometry:
+            FeedLidarOdom(state);
+            break;
+        case domain::result::MotionEstimateSource::kUnknown:
+        case domain::result::MotionEstimateSource::kExternalPrior:
+            break;
+    }
+}
 
 void PGOAdapter::FeedLocalizationResult(const domain::result::LocalizationResult& localization) {
     FeedLocalization(ToLegacyResult(localization));

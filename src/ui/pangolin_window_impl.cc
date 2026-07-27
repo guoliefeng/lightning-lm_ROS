@@ -407,8 +407,8 @@ void PangolinWindowImpl::Render() {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    // unset the current context from the main thread
-    pangolin::GetBoundWindow()->RemoveCurrent();
+    ReleaseBuffer();
+    // Destroy the window while the render thread still owns the GL context.
     pangolin::DestroyWindow(GetWindowName());
 }
 
@@ -423,6 +423,12 @@ void PangolinWindowImpl::AllocateBuffer() {
     gltext_label_global_ = font.Text(global_text);
 }
 
-void PangolinWindowImpl::ReleaseBuffer() {}
+void PangolinWindowImpl::ReleaseBuffer() {
+    plotter_vel_.reset();
+    plotter_vel_baselink_.reset();
+    plotter_confidence_.reset();
+    plotter_err_.reset();
+    plotter_err_eval_.reset();
+}
 
 }  // namespace lightning::ui
