@@ -41,6 +41,7 @@ class LidarLoc {
         bool init_with_fp_ = true;                     // 是否使用功能点进行初始化
         float max_init_yaw_diff_deg_ = 45.0f;          // 外部初值初始化后与 hint 的最大航向差
         float external_pose_yaw_search_range_ = 30.0f; // 外部初值 yaw 搜索半角(度)，窄于全局 grid_search
+        bool trust_initial_pose_ = false;              // 是否直接信任外部初始位姿
         bool enable_parking_static_ = false;           // 是否在静止时输出固定位置
         bool enable_icp_adjust_ = false;               // 是否使用icp调整ndt匹配结果提高定位精度
 

@@ -132,6 +132,7 @@ bool LegacyRuntimeBridge::Init(const std::string& yaml_path) {
     }
 
     CreateEventSink();
+    shutdown_needed_ = true;
     if (!system_root_->Init(yaml_path)) {
         return false;
     }
@@ -150,7 +151,8 @@ bool LegacyRuntimeBridge::Init(const std::string& yaml_path) {
 }
 
 void LegacyRuntimeBridge::Finish() {
-    if (system_root_) {
+    if (system_root_ && shutdown_needed_) {
+        shutdown_needed_ = false;
         system_root_->Shutdown();
     }
 

@@ -19,6 +19,15 @@
 
 namespace lightning::application::trajectory {
 
+namespace {
+
+template <typename Left, typename Right>
+bool SharesOwnership(const std::shared_ptr<Left>& left, const std::shared_ptr<Right>& right) {
+    return left && right && !left.owner_before(right) && !right.owner_before(left);
+}
+
+}  // namespace
+
 struct TrajectoryContextImpl::LegacyRuntimeResources {
     explicit LegacyRuntimeResources(std::shared_ptr<loc::IFusionEngine> fusion_engine)
         : legacy_fusion_engine(std::move(fusion_engine)) {}
@@ -114,6 +123,7 @@ void TrajectoryContextImpl::Stop() {
     }
 
     started_ = false;
+    initialized_ = false;
 }
 
 void TrajectoryContextImpl::FeedImu(const domain::sensor::ImuData& imu) {
@@ -235,13 +245,16 @@ void TrajectoryContextImpl::HandleLocalizationResult(const CloudPtr& cloud,
 void TrajectoryContextImpl::FeedMotionEstimateToBackends(
     const NavState& legacy_state,
     const domain::result::MotionEstimate& estimate) {
-    if (legacy_ && legacy_->legacy_fusion_engine) {
+    const auto legacy_fusion_engine = legacy_ ? legacy_->legacy_fusion_engine : nullptr;
+    const bool shared_backend = SharesOwnership(legacy_fusion_engine, pose_graph_backend_);
+
+    if (legacy_fusion_engine && !shared_backend) {
         switch (estimate.source) {
             case domain::result::MotionEstimateSource::kDeadReckoning:
-                legacy_->legacy_fusion_engine->FeedDeadReckoning(legacy_state);
+                legacy_fusion_engine->FeedDeadReckoning(legacy_state);
                 break;
             case domain::result::MotionEstimateSource::kLidarOdometry:
-                legacy_->legacy_fusion_engine->FeedLidarOdom(legacy_state);
+                legacy_fusion_engine->FeedLidarOdom(legacy_state);
                 break;
             case domain::result::MotionEstimateSource::kUnknown:
             case domain::result::MotionEstimateSource::kExternalPrior:
@@ -258,8 +271,11 @@ void TrajectoryContextImpl::FeedLocalizationToBackends(
     const loc::LocalizationResult* legacy_result,
     const domain::result::LocalizationResult& result,
     bool publish_if_unhandled) {
-    if (legacy_ && legacy_->legacy_fusion_engine && legacy_result) {
-        legacy_->legacy_fusion_engine->FeedLocalization(*legacy_result);
+    const auto legacy_fusion_engine = legacy_ ? legacy_->legacy_fusion_engine : nullptr;
+    const bool shared_backend = SharesOwnership(legacy_fusion_engine, pose_graph_backend_);
+
+    if (legacy_fusion_engine && legacy_result && !shared_backend) {
+        legacy_fusion_engine->FeedLocalization(*legacy_result);
     }
 
     if (pose_graph_backend_) {

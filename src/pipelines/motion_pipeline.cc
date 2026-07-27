@@ -1,5 +1,7 @@
 #include "pipelines/motion_pipeline.h"
 
+#include <cmath>
+
 namespace lightning::loc {
 
 MotionPipeline::MotionPipeline(Options options, std::shared_ptr<IMotionEstimator> motion_estimator,
@@ -18,6 +20,8 @@ void MotionPipeline::SetLidarOdomCallback(LidarOdomCallback cb) { lidar_odom_cal
 void MotionPipeline::SetKeyframeScanCallback(KeyframeScanCallback cb) { keyframe_scan_callback_ = std::move(cb); }
 
 void MotionPipeline::Start() {
+    last_dead_reckoning_timestamp_ = -std::numeric_limits<double>::infinity();
+    last_keyframe_.reset();
     if (options_.online_mode_) {
         lidar_odom_proc_cloud_.Start();
     }
@@ -36,6 +40,15 @@ void MotionPipeline::ProcessIMU(IMUPtr imu) {
     if (!dr_state.pose_is_ok_) {
         return;
     }
+
+    if (!std::isfinite(dr_state.timestamp_) ||
+        dr_state.timestamp_ <= last_dead_reckoning_timestamp_) {
+        LOG_EVERY_N(WARNING, 100)
+            << "drop non-monotonic dead reckoning state, current: " << dr_state.timestamp_
+            << ", previous: " << last_dead_reckoning_timestamp_;
+        return;
+    }
+    last_dead_reckoning_timestamp_ = dr_state.timestamp_;
 
     if (dead_reckoning_callback_) {
         dead_reckoning_callback_(dr_state);

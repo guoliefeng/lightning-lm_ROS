@@ -93,6 +93,7 @@ class LegacyRuntimeBridge {
     double last_imu_time_ = 0.0;
     double last_cloud_time_ = 0.0;
     bool initialized_ = false;
+    bool shutdown_needed_ = false;
 };
 
 }  // namespace lightning::application::system

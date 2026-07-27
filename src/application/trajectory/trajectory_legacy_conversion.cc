@@ -178,6 +178,8 @@ SensorCloudInput ToLegacyCloud(const domain::sensor::CloudData& cloud) {
         converted_point.time = point.relative_time_s;
         converted.cloud->push_back(converted_point);
     }
+    converted.cloud->width = converted.cloud->size();
+    converted.cloud->height = 1;
     converted.cloud->is_dense = cloud.is_dense;
     return converted;
 }

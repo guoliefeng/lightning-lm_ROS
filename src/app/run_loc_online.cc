@@ -36,10 +36,12 @@ int main(int argc, char** argv) {
         LOG(ERROR) << "failed to init loc";
     }
 
-    /// 从命令行指定初始位姿（默认原点）
-    Eigen::Quaterniond init_q(FLAGS_init_qw, FLAGS_init_qx, FLAGS_init_qy, FLAGS_init_qz);
-    init_q.normalize();
-    loc.SetInitPose(SE3(init_q, Vec3d(FLAGS_init_x, FLAGS_init_y, FLAGS_init_z)));
+    if (!loc.NeedsExternalInitPose()) {
+        /// 从命令行指定初始位姿（默认原点）
+        Eigen::Quaterniond init_q(FLAGS_init_qw, FLAGS_init_qx, FLAGS_init_qy, FLAGS_init_qz);
+        init_q.normalize();
+        loc.SetInitPose(SE3(init_q, Vec3d(FLAGS_init_x, FLAGS_init_y, FLAGS_init_z)));
+    }
     loc.Spin();
 
     ros::shutdown();

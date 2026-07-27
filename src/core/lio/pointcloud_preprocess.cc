@@ -267,6 +267,58 @@ void PointCloudPreprocess::MergedCloudHandler(const sensor_msgs::PointCloud2::Co
     cloud_out_.clear();
     cloud_full_.clear();
 
+    const auto has_field = [&msg](const char *name) {
+        return std::any_of(msg->fields.begin(), msg->fields.end(),
+                           [name](const sensor_msgs::PointField &field) { return field.name == name; });
+    };
+    const bool has_merged_fields = has_field("ring") && has_field("azimuth") && has_field("feature");
+    if (!has_merged_fields) {
+        pcl::PointCloud<pcl::PointXYZI> generic_cloud;
+        pcl::fromROSMsg(*msg, generic_cloud);
+        const int plsize = static_cast<int>(generic_cloud.size());
+        if (plsize <= 0) {
+            LOG_EVERY_N(WARNING, 100) << "generic merged cloud has no points";
+            return;
+        }
+
+        cloud_out_.reserve(plsize);
+        const int filter_step = std::max(1, point_filter_num_);
+        const double blind_sq = blind_ * blind_;
+        for (int i = 0; i < plsize; ++i) {
+            if (i % filter_step != 0) {
+                continue;
+            }
+
+            const auto &src = generic_cloud.points[i];
+            if (!std::isfinite(src.x) || !std::isfinite(src.y) || !std::isfinite(src.z)) {
+                continue;
+            }
+
+            const double range_sq = static_cast<double>(src.x) * static_cast<double>(src.x) +
+                                    static_cast<double>(src.y) * static_cast<double>(src.y) +
+                                    static_cast<double>(src.z) * static_cast<double>(src.z);
+            if (range_sq <= blind_sq) {
+                continue;
+            }
+
+            PointType point;
+            point.x = src.x;
+            point.y = src.y;
+            point.z = src.z;
+            point.intensity = src.intensity;
+            point.time = plsize > 1
+                             ? static_cast<double>(i) / static_cast<double>(plsize - 1) *
+                                   static_cast<double>(merged_scan_period_ms_)
+                             : 0.0;
+            cloud_out_.push_back(point);
+        }
+
+        cloud_out_.width = cloud_out_.size();
+        cloud_out_.height = 1;
+        cloud_out_.is_dense = false;
+        return;
+    }
+
     pcl::PointCloud<merged_cloud_ros::Point> pl_orig;
     pcl::fromROSMsg(*msg, pl_orig);
     const int plsize = static_cast<int>(pl_orig.points.size());
