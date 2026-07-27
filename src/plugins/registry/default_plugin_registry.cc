@@ -14,7 +14,9 @@
 #include "core/lio/pointcloud_preprocess.h"
 #include "core/localization/lidar_loc/lidar_loc.h"
 #include "io/yaml_io.h"
+#include "interfaces/ui_attachable.h"
 #include "pipelines/motion_pipeline.h"
+#include "ui/pangolin_window.h"
 
 namespace lightning::plugins::registry {
 
@@ -269,7 +271,9 @@ class ConfigurableMotionPipeline : public lightning::loc::ISensorPipeline, publi
     KeyframeScanCallback keyframe_scan_callback_;
 };
 
-class ConfigurableLocalizer : public lightning::loc::ILocalizer, public IConfigurableLocalizer {
+class ConfigurableLocalizer : public lightning::loc::ILocalizer,
+                              public IConfigurableLocalizer,
+                              public lightning::loc::IUiAttachable {
    public:
     bool Configure(const std::string& yaml_path, const std::string& global_map_path) override {
         YAML_IO yaml(yaml_path);
@@ -317,6 +321,12 @@ class ConfigurableLocalizer : public lightning::loc::ILocalizer, public IConfigu
     void Finish() override {
         if (impl_) {
             impl_->Finish();
+        }
+    }
+
+    void AttachUi(const std::shared_ptr<ui::PangolinWindow>& ui) override {
+        if (impl_) {
+            impl_->AttachUi(ui);
         }
     }
 

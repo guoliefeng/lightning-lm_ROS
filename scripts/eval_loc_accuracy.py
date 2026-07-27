@@ -3,6 +3,7 @@
 
 用法:
     python3 eval_loc_accuracy.py <eval.bag> [--ref-topic /localization/ins] [--csv out.csv]
+    python3 eval_loc_accuracy.py eval.bag --config config/yangpu_qc.yaml
 
 评估指标:
     - 平面位置误差 (m): mean / rmse / max / p95
@@ -14,6 +15,11 @@ import math
 
 import numpy as np
 import rosbag
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 
 def quat_to_mat(x, y, z, w):
@@ -41,6 +47,65 @@ def yaw_of(T):
     return math.atan2(T[1, 0], T[0, 0])
 
 
+def pose_from_rpy_translation(translation, rpy_deg):
+    roll, pitch, yaw = [math.radians(v) for v in rpy_deg]
+    cr, sr = math.cos(roll), math.sin(roll)
+    cp, sp = math.cos(pitch), math.sin(pitch)
+    cy, sy = math.cos(yaw), math.sin(yaw)
+    R = np.array([
+        [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+        [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+        [-sp, cp * sr, cp * cr],
+    ])
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = translation
+    return T
+
+
+def pose_from_yaml_node(cfg, subnode):
+    node = cfg.get(subnode, {})
+    if all(k in node for k in ("x", "y", "z", "qx", "qy", "qz", "qw")):
+        T = np.eye(4)
+        qx, qy, qz, qw = node["qx"], node["qy"], node["qz"], node["qw"]
+        T[:3, :3] = quat_to_mat(qx, qy, qz, qw)
+        T[:3, 3] = [node["x"], node["y"], node["z"]]
+        return T
+    translation = node.get("translation", [0.0, 0.0, 0.0])
+    rpy_deg = node.get("rpy_deg", [0.0, 0.0, 0.0])
+    return pose_from_rpy_translation(translation, rpy_deg)
+
+
+def load_ins_to_map_transform(config_path):
+    if not config_path:
+        return np.eye(4), False
+    if yaml is None:
+        raise RuntimeError("PyYAML required for --config; pip install pyyaml")
+    with open(config_path, "r", encoding="utf-8") as fin:
+        cfg = yaml.safe_load(fin).get("map_frame", {})
+    if not cfg.get("enabled", False):
+        return np.eye(4), False
+
+    mode = cfg.get("mode", "fixed")
+    if mode == "anchor_pair":
+        T_ins = pose_from_yaml_node(cfg, "ins_anchor")
+        T_map = pose_from_yaml_node(cfg, "map_anchor")
+        T_ins_to_map = T_map @ np.linalg.inv(T_ins)
+    else:
+        translation = cfg.get("ins_to_map_translation", [0.0, 0.0, 0.0])
+        rpy_deg = cfg.get("ins_to_map_rotation_rpy_deg", [0.0, 0.0, 0.0])
+        T_ins_to_map = pose_from_rpy_translation(translation, rpy_deg)
+
+    yaw_deg = math.degrees(math.atan2(T_ins_to_map[1, 0], T_ins_to_map[0, 0]))
+    print("map_frame anchor: trans [%.3f, %.3f, %.3f] m, yaw %.2f deg" % (
+        T_ins_to_map[0, 3], T_ins_to_map[1, 3], T_ins_to_map[2, 3], yaw_deg))
+    return T_ins_to_map, True
+
+
+def transform_pose(T_ins_to_map, T_pose):
+    return T_ins_to_map @ T_pose
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("bag")
@@ -52,10 +117,28 @@ def main():
                         help="先做 2D 刚体对齐(Umeyama)再统计 ATE，消除地图系与参考系的常值偏移")
     parser.add_argument("--window", type=float, default=0.0,
                         help="只统计前 N 秒（0 表示全程）")
+    parser.add_argument("--config", default="",
+                        help="从 yaml 读取 map_frame.T_ins_to_map 并变换参考轨迹")
+    parser.add_argument("--ins-to-map-trans", default="",
+                        help="手动指定平移 dx,dy,dz (m)，覆盖 config 中的平移")
+    parser.add_argument("--ins-to-map-yaw", type=float, default=None,
+                        help="手动指定 yaw 偏移 (deg)，覆盖 config 中的旋转")
     args = parser.parse_args()
 
-    map_to_odom = {}   # stamp -> 4x4
-    odom_to_base = {}  # stamp -> 4x4
+    T_ins_to_map, anchor_enabled = load_ins_to_map_transform(args.config)
+    if args.ins_to_map_trans:
+        vals = [float(v) for v in args.ins_to_map_trans.split(",")]
+        T_ins_to_map[:3, 3] = vals[:3]
+        anchor_enabled = True
+    if args.ins_to_map_yaw is not None:
+        yaw = math.radians(args.ins_to_map_yaw)
+        c, s = math.cos(yaw), math.sin(yaw)
+        R = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+        T_ins_to_map[:3, :3] = R @ T_ins_to_map[:3, :3]
+        anchor_enabled = True
+
+    map_to_odom = []   # (stamp, 4x4)
+    odom_to_base = []  # (stamp, 4x4)
     ref = []           # (stamp, 4x4)
 
     with rosbag.Bag(args.bag) as bag:
@@ -64,9 +147,9 @@ def main():
                 for tr in msg.transforms:
                     stamp = tr.header.stamp.to_sec()
                     if tr.header.frame_id == "map" and tr.child_frame_id == "odom":
-                        map_to_odom[stamp] = tf_to_mat(tr.transform)
+                        map_to_odom.append((stamp, tf_to_mat(tr.transform)))
                     elif tr.header.frame_id == "odom" and tr.child_frame_id == "base_link":
-                        odom_to_base[stamp] = tf_to_mat(tr.transform)
+                        odom_to_base.append((stamp, tf_to_mat(tr.transform)))
             else:
                 stamp = msg.header.stamp.to_sec()
                 T = np.eye(4)
@@ -74,7 +157,12 @@ def main():
                 q = msg.pose.pose.orientation
                 T[:3, :3] = quat_to_mat(q.x, q.y, q.z, q.w)
                 T[:3, 3] = [p.x, p.y, p.z]
+                if anchor_enabled:
+                    T = transform_pose(T_ins_to_map, T)
                 ref.append((stamp, T))
+
+    if anchor_enabled:
+        print("reference trajectory transformed by T_ins_to_map")
 
     if not ref:
         print("no reference messages on", args.ref_topic)
@@ -83,10 +171,28 @@ def main():
         print("missing tf chains: map->odom=%d odom->base=%d" % (len(map_to_odom), len(odom_to_base)))
         return
 
+    map_to_odom.sort(key=lambda x: x[0])
+    odom_to_base.sort(key=lambda x: x[0])
+
+    def find_nearest_tf(tfs, stamp, max_dt=0.05):
+        ts = np.array([t for t, _ in tfs])
+        idx = int(np.searchsorted(ts, stamp))
+        cand = []
+        if 0 <= idx < len(tfs):
+            cand.append(tfs[idx])
+        if idx - 1 >= 0:
+            cand.append(tfs[idx - 1])
+        if not cand:
+            return None
+        best = min(cand, key=lambda x: abs(x[0] - stamp))
+        if abs(best[0] - stamp) > max_dt:
+            return None
+        return best[1]
+
     # 估计位姿：同一时间戳的两条 TF 组合
     est = []
-    for stamp, T_mo in sorted(map_to_odom.items()):
-        T_ob = odom_to_base.get(stamp)
+    for stamp, T_mo in map_to_odom:
+        T_ob = find_nearest_tf(odom_to_base, stamp)
         if T_ob is not None:
             est.append((stamp, T_mo @ T_ob))
     print("est poses: %d, ref poses: %d" % (len(est), len(ref)))

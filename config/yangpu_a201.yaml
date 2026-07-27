@@ -1,27 +1,19 @@
-# 针对 yangpu/qc 数据的在线建图测试配置（由架构评审自动生成）
+# yangpu/A201 在线定位配置（基于 yangpu_qc，2026-06-09 采集）
 common:
-  dataset: "hainan"
+  dataset: "yangpu_a201"
   lidar_topic: "/lidar_preprocessor/meta_cloud"
   livox_lidar_topic: "/livox/lidar"
   imu_topic: "/ins_driver/imu"
-  gnss_topic: "/ins_driver/gps"       # NavSatFix，Phase D 通路（暂只记录，不参与融合）
-  odom_topic: "/localization/ins"     # nav_msgs/Odometry INS 里程计
+  gnss_topic: "/ins_driver/gps"
+  odom_topic: "/localization/ins"
 
-# INS / 外部里程计坐标系 → 定位地图坐标系锚定（Sprint 5）
-# p_map = T_ins_to_map * p_ins；mode=anchor_pair 时由标定点对自动求变换
+# A201 首帧 INS 约 (308.4, -150.6)；与地图系接近，先关闭锚定，直接用 INS 初值
 map_frame:
-  enabled: true
-  # 说明：
-  # - yangpu/qc 的 /localization/ins 已是“INS 本地坐标系”，与地图系存在常值平移（且可能有 yaw 偏置）。
-  # - 先用 Sprint 4 的一次成功定位结果，构造一个粗略的平移锚定，使 INS 参考轨迹落到地图附近，便于评估。
-  # - 后续可用 anchor_pair + 多点 / 最小二乘进一步标定 yaw 与平移。
-  mode: fixed
-  ins_to_map_translation: [-238.5073, -191.3690, 0.8848]
-  ins_to_map_rotation_rpy_deg: [0.0, 0.0, 0.0]
+  enabled: false
 
 # fasterlio 参数
 fasterlio:
-  lidar_type: 6                # 6 merged PointCloud2(meta_cloud)
+  lidar_type: 6
   scan_line: 16
   blind: 0.5
   time_scale: 1e-3
@@ -38,21 +30,21 @@ fasterlio:
 
   use_aa: true
 
-  kf_dis_th: 1.0               # 关键帧距离阈值
-  kf_angle_th: 10.0            # 关键帧角度阈值(度)
-  min_effect_feat_surf: 80     # 有效特征极低且单帧平移>0.5m 时拒绝 LIO 更新
-  max_lidar_frame_trans_m: 1.5 # 单帧平移更新超过此值视为退化
-  max_lidar_frame_rot_deg: 8.0 # 单帧旋转更新超过此值视为退化
-  max_lidar_velocity_mps: 25.0
-  max_ivox_grids: 30000
+  kf_dis_th: 1.0
+  kf_angle_th: 10.0
+  min_effect_feat_surf: 80
+  max_lidar_frame_trans_m: 0.8
+  max_lidar_frame_rot_deg: 6.0
+  max_lidar_velocity_mps: 8.0    # A201 港内 IGv 约 5~7 m/s，收紧速度门限
+  max_ivox_grids: 12000
+  ivox_capacity: 12000            # LRU 与 max_ivox_grids 对齐，溢出时重置局部图
+  max_odom_translation_m: 25.0    # 定位模式 odom 漂移上限（map->odom 由 NDT 吸收全局位移）
 
   acc_cov: 0.1
   gyr_cov: 0.1
   b_acc_cov: 0.0001
   b_gyr_cov: 0.0001
   extrinsic_est_en: false
-  # meta_cloud 已在 base_link；IMU 外参来自 bag /tf_static: base_link->ins t=[0,0.15,0]
-  # 此处填 T_imu_lidar ≈ inv(T_base_ins)，旋转约 1.15° 近似单位阵
   extrinsic_T: [ 0, -0.15, 0 ]
   extrinsic_R: [ 1, 0, 0,
                  0, 1, 0,
@@ -69,7 +61,7 @@ g2p5:
 
 system:
   with_loop_closing: true
-  with_ui: true
+  with_ui: false  # 精度评测 headless；本地调试可改 true
   with_2dui: false
   with_g2p5: false
   step_on_kf: false
@@ -90,12 +82,11 @@ loop_closing:
   ndt_score_th: 1.0
   with_height: false
 
-### localization ================================================================================================
 lidar_loc:
   enable_dynamic_polygon: false
   enable_parking_static: true
   enable_icp_adjust: false
-  filter_intensity_max: 255.0   # yangpu 数据反射率 0~255，且地图中位数强度约 4，收紧会滤掉大部分点
+  filter_intensity_max: 255.0
   filter_intensity_min: 0.0
   filter_z_max: 30.0
   filter_z_min: -1.0
@@ -104,7 +95,7 @@ lidar_loc:
   grid_search_angle_step: 60
   lidar_loc_odom_th: 0.5
   init_with_fp: true
-  min_init_confidence: 0.5    # 港口场景地图与数据相隔一天，集装箱变动大，1m NDT 概率整体偏低
+  min_init_confidence: 0.5
   max_init_yaw_diff_deg: 45.0
   external_pose_yaw_search_range: 30.0
   update_dynamic_cloud: true

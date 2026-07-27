@@ -1,5 +1,7 @@
 #include "adapters/lidar_loc_adapter.h"
 
+#include "ui/pangolin_window.h"
+
 namespace lightning::loc {
 
 LidarLocAdapter::LidarLocAdapter(LidarLoc::Options options) : impl_(std::make_shared<LidarLoc>(options)) {}
@@ -19,5 +21,11 @@ void LidarLocAdapter::SetInitialPose(const SE3& pose) { impl_->SetInitialPose(po
 LocalizationResult LidarLocAdapter::GetLocalizationResult() const { return impl_->GetLocalizationResult(); }
 
 void LidarLocAdapter::Finish() { impl_->Finish(); }
+
+void LidarLocAdapter::AttachUi(const std::shared_ptr<ui::PangolinWindow>& ui) {
+    if (impl_) {
+        impl_->SetUi(ui);
+    }
+}
 
 }  // namespace lightning::loc

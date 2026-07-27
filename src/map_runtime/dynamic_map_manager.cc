@@ -136,4 +136,25 @@ void DynamicMapManager::Finish() {
     }
 }
 
+void DynamicMapManager::SetUi(const std::shared_ptr<ui::PangolinWindow>& ui) {
+    ui_ = ui;
+    RefreshUiDisplay();
+}
+
+void DynamicMapManager::RefreshUiDisplay() {
+    if (ui_ == nullptr || map_ == nullptr) {
+        return;
+    }
+
+    const auto static_cloud = map_->GetStaticCloud();
+    if (!static_cloud.empty()) {
+        ui_->UpdatePointCloudGlobal(static_cloud);
+        LOG(INFO) << "UI map refresh: " << static_cloud.size() << " static chunks";
+    }
+    const auto dynamic_cloud = map_->GetDynamicCloud();
+    if (!dynamic_cloud.empty()) {
+        ui_->UpdatePointCloudDynamic(dynamic_cloud);
+    }
+}
+
 }  // namespace lightning::loc

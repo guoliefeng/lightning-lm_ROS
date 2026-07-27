@@ -1,5 +1,7 @@
 #include "adapters/laser_mapping_adapter.h"
 
+#include "ui/pangolin_window.h"
+
 namespace lightning::loc {
 
 LaserMappingAdapter::LaserMappingAdapter(LaserMapping::Options options)
@@ -24,5 +26,11 @@ Keyframe::Ptr LaserMappingAdapter::GetKeyframe() const { return impl_->GetKeyfra
 CloudPtr LaserMappingAdapter::GetUndistortedScan() const { return impl_->GetScanUndist(); }
 
 CloudPtr LaserMappingAdapter::GetProjectedCloud() const { return impl_->GetProjCloud(); }
+
+void LaserMappingAdapter::AttachUi(const std::shared_ptr<ui::PangolinWindow>& ui) {
+    if (impl_) {
+        impl_->SetUI(ui);
+    }
+}
 
 }  // namespace lightning::loc

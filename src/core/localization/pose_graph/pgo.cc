@@ -181,7 +181,18 @@ bool PGO::ProcessLidarOdom(const NavState& lio_result) {
     if (!impl_->lidar_odom_pose_queue_.empty()) {
         const double last_stamp = impl_->lidar_odom_pose_queue_.back().timestamp_;
         if (lio_result.timestamp_ < last_stamp) {
-            LOG(WARNING) << "当前LidarOdom定位时间戳回退，实际相减得" << lio_result.timestamp_ - last_stamp;
+            const double dt = lio_result.timestamp_ - last_stamp;
+            if (dt < -1e6) {
+                // 启动阶段 sensor epoch 与 sim clock 混用，清空队列并继续
+                LOG(WARNING) << "LidarOdom time-base jump " << dt << " s, clearing LO queue";
+                impl_->lidar_odom_pose_queue_.clear();
+            } else if (dt > -0.25) {
+                // 线程/多 bag 边界导致的轻微乱序，丢弃该帧，避免污染 PGO 队列
+                return true;
+            } else {
+                LOG(WARNING) << "LidarOdom timestamp rollback " << dt << " s, frame dropped";
+                return true;
+            }
         }
     }
 

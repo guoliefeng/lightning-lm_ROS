@@ -34,7 +34,7 @@
 | Phase A 单测 | `test_relocalization_main_path` 全部通过（含 Freeze / PGO feed / GNSS 通道） |
 | TF 双链路 | bag 播放期间 `/tf` 同时发布 `map→odom` 与 `odom→base_link`（详见 [testing/phase_a_test_report.md](testing/phase_a_test_report.md)） |
 | GNSS/轮速通道 | 通过（60s ≈6000 条 GNSS + ≈5500 条 INS 里程计进状态估计器） |
-| 精度评估（60s 含运动段） | **不通过**：地图系与 INS 系错位 + QC 场景 LIO 运动后发散（详见 [testing/sprint3_accuracy_test_report.md](testing/sprint3_accuracy_test_report.md)） |
+| 精度评估（60s 含运动段） | Sprint 3：**不通过**（RMSE 587–799 m，系间错位）；Sprint 5：**部分改善**（`T_ins_to_map` 后 RMSE **~18 m**，yaw 偏置待标定，见 [testing/sprint5_accuracy_test_report.md](testing/sprint5_accuracy_test_report.md)） |
 | 已修复 bug | `ToLegacyCloud` 未回填 `header.stamp`；外部初值未 `LoadOnPose` |
 
 配置：`config/yangpu_qc.yaml`（meta_cloud + INS IMU + yangpu 地图路径）。

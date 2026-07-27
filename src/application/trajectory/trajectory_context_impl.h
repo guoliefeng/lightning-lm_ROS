@@ -15,6 +15,10 @@
 #include "domain/result/motion_estimate.h"
 #include "domain/sensor/scan_snapshot.h"
 
+namespace lightning::ui {
+class PangolinWindow;
+}
+
 namespace lightning::application::system {
 struct LocalizationAssembly;
 class RelocalizationCoordinator;
@@ -55,6 +59,8 @@ class TrajectoryContextImpl : public domain::contracts::ITrajectoryContext {
     domain::result::LocalizationResult GetLatestLocalizationResult() const override;
 
     void SetInitialPose(const domain::geometry::Pose3& pose) override;
+
+    void AttachUi(const std::shared_ptr<ui::PangolinWindow>& ui);
 
    private:
     void WireTrajectoryFlow();

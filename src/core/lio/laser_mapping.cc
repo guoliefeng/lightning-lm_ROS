@@ -79,6 +79,20 @@ bool LaserMapping::LoadParamsFromYAML(const std::string &yaml_file) {
         if (fasterlio["max_lidar_frame_rot_deg"]) {
             options_.max_lidar_frame_rot_deg_ = fasterlio["max_lidar_frame_rot_deg"].as<double>();
         }
+        if (fasterlio["max_lidar_velocity_mps"]) {
+            options_.max_lidar_velocity_mps_ = fasterlio["max_lidar_velocity_mps"].as<double>();
+        }
+        if (fasterlio["max_ivox_grids"]) {
+            options_.max_ivox_grids_ = fasterlio["max_ivox_grids"].as<int>();
+        }
+        if (fasterlio["max_odom_translation_m"]) {
+            options_.max_odom_translation_m_ = fasterlio["max_odom_translation_m"].as<double>();
+        }
+        if (fasterlio["ivox_capacity"]) {
+            ivox_options_.capacity_ = fasterlio["ivox_capacity"].as<std::size_t>();
+        } else {
+            ivox_options_.capacity_ = static_cast<std::size_t>(options_.max_ivox_grids_);
+        }
 
         if (yaml["roi"] && yaml["roi"]["height_max"] && yaml["roi"]["height_min"]) {
             preprocess_->SetHeightROI(yaml["roi"]["height_max"].as<float>(), yaml["roi"]["height_min"].as<float>());
@@ -266,18 +280,35 @@ bool LaserMapping::Run() {
 
     const bool excessive_update = delta_trans > options_.max_lidar_frame_trans_m_ ||
                                   delta_rotation_deg > options_.max_lidar_frame_rot_deg_;
+    const double vel_norm = state_point_.GetVel().norm();
+    const bool velocity_explosion = vel_norm > options_.max_lidar_velocity_mps_;
+    const bool ivox_overflow = static_cast<int>(ivox_->NumValidGrids()) > options_.max_ivox_grids_;
+    const bool odom_drift =
+        !options_.is_in_slam_mode_ && state_point_.pos_.norm() > options_.max_odom_translation_m_;
     const bool degenerate_frame =
-        excessive_update ||
+        excessive_update || velocity_explosion || ivox_overflow || odom_drift ||
         (effect_feat_num_ < options_.min_effect_feat_surf_ && delta_trans > 0.5);
 
     if (degenerate_frame) {
-        kf_.ChangeX(pred_state);
-        state_point_ = pred_state;
-        state_point_.timestamp_ = measures_.lidar_end_time_;
+        if (odom_drift) {
+            ResetOdomState();
+            ResetIvoxLocalMap();
+            state_point_.timestamp_ = measures_.lidar_end_time_;
+        } else {
+            kf_.ChangeX(pred_state);
+            state_point_ = pred_state;
+            state_point_.timestamp_ = measures_.lidar_end_time_;
+            if (ivox_overflow) {
+                ResetIvoxLocalMap();
+            }
+        }
         LOG(WARNING) << "LIO degenerate frame rejected: effect=" << effect_feat_num_ << " (min "
                      << options_.min_effect_feat_surf_ << "), delta_trans=" << delta_trans << " m (max "
                      << options_.max_lidar_frame_trans_m_ << "), delta_rot=" << delta_rotation_deg << " deg (max "
-                     << options_.max_lidar_frame_rot_deg_ << ")";
+                     << options_.max_lidar_frame_rot_deg_ << "), vel=" << vel_norm << " m/s (max "
+                     << options_.max_lidar_velocity_mps_ << "), ivox_grids=" << ivox_->NumValidGrids() << " (max "
+                     << options_.max_ivox_grids_ << "), odom_norm=" << pred_state.pos_.norm() << " m (max "
+                     << options_.max_odom_translation_m_ << ")";
     } else {
         // 仅将通过退化检查的激光更新写入局部地图。
         Timer::Evaluate([&, this]() { MapIncremental(); }, "    Incremental Mapping");
@@ -286,17 +317,18 @@ bool LaserMapping::Run() {
     LOG(INFO) << "[ mapping ]: In num: " << scan_undistort_->points.size() << " down " << cur_pts
               << " Map grid num: " << ivox_->NumValidGrids() << " effect num : " << effect_feat_num_;
 
-    /// keyframes
-    if (last_kf_ == nullptr) {
-        MakeKF();
-    } else {
-        SE3 last_pose = last_kf_->GetLIOPose();
-        SE3 cur_pose = state_point_.GetPose();
-        if ((last_pose.translation() - cur_pose.translation()).norm() > options_.kf_dis_th_ ||
-            (last_pose.so3().inverse() * cur_pose.so3()).log().norm() > options_.kf_angle_th_) {
+    if (!degenerate_frame) {
+        if (last_kf_ == nullptr) {
             MakeKF();
-        } else if (!options_.is_in_slam_mode_ && (state_point_.timestamp_ - last_kf_->GetState().timestamp_) > 2.0) {
-            MakeKF();
+        } else {
+            SE3 last_pose = last_kf_->GetLIOPose();
+            SE3 cur_pose = state_point_.GetPose();
+            if ((last_pose.translation() - cur_pose.translation()).norm() > options_.kf_dis_th_ ||
+                (last_pose.so3().inverse() * cur_pose.so3()).log().norm() > options_.kf_angle_th_) {
+                MakeKF();
+            } else if (!options_.is_in_slam_mode_ && (state_point_.timestamp_ - last_kf_->GetState().timestamp_) > 2.0) {
+                MakeKF();
+            }
         }
     }
 
@@ -466,6 +498,29 @@ bool LaserMapping::SyncPackages() {
     // measures_.lidar_end_time_;
 
     return true;
+}
+
+void LaserMapping::ResetOdomState() {
+    NavState fixed = kf_.GetX();
+    fixed.pos_ = Vec3d::Zero();
+    fixed.vel_ = Vec3d::Zero();
+    kf_.ChangeX(fixed);
+    state_point_ = fixed;
+    kf_imu_ = kf_;
+    LOG(WARNING) << "LIO odom state reset to origin";
+}
+
+void LaserMapping::ResetIvoxLocalMap() {
+    if (!ivox_) {
+        return;
+    }
+    ivox_->Clear();
+    if (scan_down_world_ && !scan_down_world_->empty()) {
+        ivox_->AddPoints(scan_down_world_->points);
+        LOG(WARNING) << "LIO ivox local map reset, reseeded with " << scan_down_world_->size() << " points";
+    } else {
+        LOG(WARNING) << "LIO ivox local map cleared (no scan to reseed)";
+    }
 }
 
 void LaserMapping::MapIncremental() {

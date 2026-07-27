@@ -43,6 +43,9 @@ class LaserMapping {
         int min_effect_feat_surf_ = 80;  // 极低有效特征时拒绝本帧（与过大步长联合判断）
         double max_lidar_frame_trans_m_ = 1.5;
         double max_lidar_frame_rot_deg_ = 8.0;
+        double max_lidar_velocity_mps_ = 25.0;  // 港口 IGv 上限约 10m/s，超出视为 LIO 发散
+        int max_ivox_grids_ = 30000;            // ivox 栅格异常膨胀时拒绝更新
+        double max_odom_translation_m_ = 30.0;  // 定位模式下 odom 原点偏移上限
     };
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -129,7 +132,8 @@ class LaserMapping {
     }
 
     void MapIncremental();
-
+    void ResetIvoxLocalMap();
+    void ResetOdomState();
     bool LoadParamsFromYAML(const std::string &yaml);
 
     /// 创建关键帧

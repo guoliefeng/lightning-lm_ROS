@@ -28,6 +28,10 @@ class DynamicMapManager : public IDynamicMapManager {
     void ResetDynamicLayer() override;
     void Finish() override;
 
+    /// 运行时挂载 UI，并立即刷新已加载地图块到 Pangolin。
+    void SetUi(const std::shared_ptr<ui::PangolinWindow>& ui);
+    void RefreshUiDisplay();
+
    private:
     DynamicMapManagerOptions options_;
     std::shared_ptr<ui::PangolinWindow> ui_ = nullptr;

@@ -6,6 +6,7 @@
 #include <glog/logging.h>
 
 #include "core/system/loc_system.h"
+#include "map_runtime/map_frame_anchor.h"
 #include "ui/pangolin_window.h"
 #include "wrapper/ros_utils.h"
 
@@ -17,6 +18,8 @@ DEFINE_double(init_qx, 0.0, "初始姿态四元数 x");
 DEFINE_double(init_qy, 0.0, "初始姿态四元数 y");
 DEFINE_double(init_qz, 0.0, "初始姿态四元数 z");
 DEFINE_double(init_qw, 1.0, "初始姿态四元数 w");
+
+DEFINE_bool(init_in_ins_frame, true, "init_x/y/z 为 INS 坐标系；启用 map_frame 时自动变换到地图系");
 
 /// 运行定位的测试
 int main(int argc, char** argv) {
@@ -40,7 +43,18 @@ int main(int argc, char** argv) {
         /// 从命令行指定初始位姿（默认原点）
         Eigen::Quaterniond init_q(FLAGS_init_qw, FLAGS_init_qx, FLAGS_init_qy, FLAGS_init_qz);
         init_q.normalize();
-        loc.SetInitPose(SE3(init_q, Vec3d(FLAGS_init_x, FLAGS_init_y, FLAGS_init_z)));
+        SE3 init_pose(init_q, Vec3d(FLAGS_init_x, FLAGS_init_y, FLAGS_init_z));
+
+        MapFrameAnchor map_frame_anchor;
+        map_frame_anchor.LoadFromYaml(FLAGS_config);
+        if (map_frame_anchor.enabled() && FLAGS_init_in_ins_frame) {
+            const SE3 mapped = map_frame_anchor.TransformInsToMap(init_pose);
+            LOG(INFO) << "init pose (ins frame): " << init_pose.translation().transpose();
+            LOG(INFO) << "init pose (map frame): " << mapped.translation().transpose();
+            init_pose = mapped;
+        }
+
+        loc.SetInitPose(init_pose);
     }
     loc.Spin();
 

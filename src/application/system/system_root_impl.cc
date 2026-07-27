@@ -239,4 +239,11 @@ std::shared_ptr<domain::contracts::IMapOdomAuthority> SystemRootImpl::GetMapOdom
     return map_odom_authority_;
 }
 
+void SystemRootImpl::AttachUi(const std::shared_ptr<ui::PangolinWindow>& ui) {
+    auto trajectory = GetOrCreateDefaultTrajectory();
+    if (auto* context = dynamic_cast<trajectory::TrajectoryContextImpl*>(trajectory.get())) {
+        context->AttachUi(ui);
+    }
+}
+
 }  // namespace lightning::application::system

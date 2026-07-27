@@ -87,6 +87,9 @@ class IVox {
     /// get number of valid grids
     size_t NumValidGrids() const;
 
+    /// clear all voxels (e.g. reset LIO local map after overflow)
+    void Clear();
+
     /// get statistics of the points
     std::vector<float> StatGridPoints() const;
 
@@ -198,6 +201,12 @@ bool IVox<dim, node_type, PointType>::GetClosestPoint(const PointType& pt, Point
 template <int dim, IVoxNodeType node_type, typename PointType>
 size_t IVox<dim, node_type, PointType>::NumValidGrids() const {
     return grids_map_.size();
+}
+
+template <int dim, IVoxNodeType node_type, typename PointType>
+void IVox<dim, node_type, PointType>::Clear() {
+    grids_map_.clear();
+    grids_cache_.clear();
 }
 
 template <int dim, IVoxNodeType node_type, typename PointType>

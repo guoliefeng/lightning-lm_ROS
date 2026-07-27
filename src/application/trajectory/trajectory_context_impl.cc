@@ -14,7 +14,9 @@
 #include "core/system/async_message_process.h"
 #include "interfaces/fusion_engine.h"
 #include "interfaces/localizer.h"
+#include "interfaces/motion_estimator.h"
 #include "interfaces/sensor_pipeline.h"
+#include "interfaces/ui_attachable.h"
 #include "io/yaml_io.h"
 
 namespace lightning::application::trajectory {
@@ -171,6 +173,15 @@ domain::result::LocalizationResult TrajectoryContextImpl::GetLatestLocalizationR
 void TrajectoryContextImpl::SetInitialPose(const domain::geometry::Pose3& pose) {
     if (localizer_) {
         localizer_->SetInitialPose(SE3(pose.rotation, pose.translation));
+    }
+}
+
+void TrajectoryContextImpl::AttachUi(const std::shared_ptr<ui::PangolinWindow>& ui) {
+    if (auto* attachable = dynamic_cast<loc::IUiAttachable*>(localizer_.get())) {
+        attachable->AttachUi(ui);
+    }
+    if (auto* attachable = dynamic_cast<loc::IUiAttachable*>(motion_estimator_.get())) {
+        attachable->AttachUi(ui);
     }
 }
 

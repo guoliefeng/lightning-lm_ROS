@@ -300,7 +300,15 @@ bool LidarLoc::YawSearch(SE3& pose, double& confidence, CloudPtr input, CloudPtr
 
     /// 高分辨率
     if (confidence > options_.min_init_confidence_) {
+        const double coarse_confidence = confidence;
+        const SE3 coarse_pose = pose;
         Localize(pose, confidence, input, output, false);
+        if (confidence < options_.min_init_confidence_ && coarse_confidence > options_.min_init_confidence_) {
+            LOG(WARNING) << "high-res init refine lowered score from " << coarse_confidence << " to " << confidence
+                         << "; keeping coarse result";
+            pose = coarse_pose;
+            confidence = coarse_confidence;
+        }
     }
 
     if (confidence > options_.min_init_confidence_) {
@@ -494,6 +502,22 @@ void LidarLoc::SetInitialPose(SE3 init_pose) {
     initial_pose_set_ = true;
     initial_pose_ = init_pose;
     LOG(INFO) << "Set initial pose is: " << initial_pose_.translation().transpose();
+
+    if (dynamic_map_manager_) {
+        dynamic_map_manager_->LoadOnPose(initial_pose_);
+        dynamic_map_manager_->RebuildTargetIfNeeded();
+        if (auto manager = std::dynamic_pointer_cast<DynamicMapManager>(dynamic_map_manager_)) {
+            manager->RefreshUiDisplay();
+        }
+    }
+}
+
+void LidarLoc::SetUi(const std::shared_ptr<ui::PangolinWindow>& ui) {
+    auto manager = std::dynamic_pointer_cast<DynamicMapManager>(dynamic_map_manager_);
+    if (manager) {
+        manager->SetUi(ui);
+        manager->RebuildTargetIfNeeded();
+    }
 }
 
 void LidarLoc::Align(const CloudPtr& input) {

@@ -33,6 +33,7 @@
 #include "interfaces/motion_estimator.h"
 #include "interfaces/sensor_pipeline.h"
 #include "pipelines/motion_pipeline.h"
+#include "map_runtime/map_frame_anchor.h"
 
 namespace lightning {
 namespace {
@@ -789,6 +790,61 @@ bool TestNavStateIntegratesVelocity() {
                  "NavState propagation dropped the acceleration-derived velocity increment");
 }
 
+bool TestMapFrameAnchor() {
+    const std::string yaml_path = "/tmp/test_map_frame_anchor.yaml";
+    {
+        std::ofstream fout(yaml_path);
+        fout << "map_frame:\n"
+             << "  enabled: true\n"
+             << "  mode: fixed\n"
+             << "  ins_to_map_translation: [10.0, -5.0, 1.0]\n"
+             << "  ins_to_map_rotation_rpy_deg: [0.0, 0.0, 90.0]\n";
+    }
+
+    MapFrameAnchor anchor;
+    bool ok = true;
+    ok &= Check(anchor.LoadFromYaml(yaml_path), "failed to load map_frame anchor yaml");
+    ok &= Check(anchor.enabled(), "map_frame anchor should be enabled");
+
+    const SE3 ins_pose(SO3(), Vec3d(1.0, 2.0, 3.0));
+    const SE3 mapped = anchor.TransformInsToMap(ins_pose);
+    ok &= Check(mapped.translation().isApprox(Vec3d(8.0, -4.0, 4.0), 1e-6),
+                "fixed transform translation mismatch");
+    ok &= Check(std::abs(mapped.so3().log().z() - M_PI_2) < 1e-6, "fixed transform yaw mismatch");
+
+    const std::string anchor_yaml = "/tmp/test_map_frame_anchor_pair.yaml";
+    {
+        std::ofstream fout(anchor_yaml);
+        fout << "map_frame:\n"
+             << "  enabled: true\n"
+             << "  mode: anchor_pair\n"
+             << "  ins_anchor:\n"
+             << "    x: 0.0\n"
+             << "    y: 0.0\n"
+             << "    z: 0.0\n"
+             << "    qx: 0.0\n"
+             << "    qy: 0.0\n"
+             << "    qz: 0.0\n"
+             << "    qw: 1.0\n"
+             << "  map_anchor:\n"
+             << "    x: 10.0\n"
+             << "    y: -5.0\n"
+             << "    z: 1.0\n"
+             << "    qx: 0.0\n"
+             << "    qy: 0.0\n"
+             << "    qz: 0.7071068\n"
+             << "    qw: 0.7071068\n";
+    }
+
+    MapFrameAnchor anchor_pair;
+    ok &= Check(anchor_pair.LoadFromYaml(anchor_yaml), "failed to load anchor_pair yaml");
+    const SE3 mapped_pair = anchor_pair.TransformInsToMap(ins_pose);
+    ok &= Check(mapped_pair.translation().isApprox(Vec3d(8.0, -4.0, 4.0), 1e-5),
+                "anchor_pair translation mismatch");
+    ok &= Check(std::abs(mapped_pair.so3().log().z() - M_PI_2) < 1e-5, "anchor_pair yaw mismatch");
+    return ok;
+}
+
 }  // namespace
 }  // namespace lightning
 
@@ -805,6 +861,7 @@ int main() {
     ok &= lightning::TestLegacyCloudConversionPreservesTimestamp();
     ok &= lightning::TestMotionPipelineDropsNonMonotonicDeadReckoning();
     ok &= lightning::TestNavStateIntegratesVelocity();
+    ok &= lightning::TestMapFrameAnchor();
     if (!ok) {
         return EXIT_FAILURE;
     }

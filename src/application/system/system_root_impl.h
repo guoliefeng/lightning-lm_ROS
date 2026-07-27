@@ -13,6 +13,10 @@
 #include "domain/sensor/cloud_data.h"
 #include "domain/sensor/imu_data.h"
 
+namespace lightning::ui {
+class PangolinWindow;
+}
+
 namespace lightning::application::system {
 
 class SystemRootImpl : public domain::contracts::ISystemRoot {
@@ -54,6 +58,8 @@ class SystemRootImpl : public domain::contracts::ISystemRoot {
     bool SetInitialPose(const std::string& trajectory_id, const domain::geometry::Pose3& pose) override;
 
     std::shared_ptr<domain::contracts::IMapOdomAuthority> GetMapOdomAuthority() const;
+
+    void AttachUi(const std::shared_ptr<ui::PangolinWindow>& ui);
 
    private:
     std::shared_ptr<domain::contracts::ITrajectoryContext> FindTrajectoryLocked(const std::string& trajectory_id) const;

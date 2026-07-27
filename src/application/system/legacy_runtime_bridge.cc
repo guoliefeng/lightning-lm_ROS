@@ -3,6 +3,7 @@
 #include <utility>
 
 #include <glog/logging.h>
+#include <ros/ros.h>
 
 #include "application/trajectory/trajectory_legacy_conversion.h"
 #include "application/system/system_root_impl.h"
@@ -144,6 +145,10 @@ bool LegacyRuntimeBridge::Init(const std::string& yaml_path) {
 
     if (auto* root_impl = dynamic_cast<SystemRootImpl*>(system_root_.get())) {
         map_odom_authority_ = root_impl->GetMapOdomAuthority();
+        if (ui_) {
+            root_impl->AttachUi(ui_);
+            LOG(INFO) << "runtime UI attached to localizer and motion estimator";
+        }
     }
 
     initialized_ = true;
@@ -293,16 +298,20 @@ void LegacyRuntimeBridge::HandleMotionEstimate(const domain::result::MotionEstim
     PublishSplitTf(estimate.timestamp_s);
 }
 
-void LegacyRuntimeBridge::PublishSplitTf(double timestamp_s) {
+void LegacyRuntimeBridge::PublishSplitTf(double /*timestamp_s*/) {
     if (!tf_callback_ || !has_motion_pose_) {
         return;
     }
 
+    // 使用 ROS 时间戳（仿真 / 回放时来自 /clock），保证 map->odom 与 odom->base_link 在同一时间基准下发布。
+    // 避免不同模块使用“传感器 epoch 时间”与“回放 clock 时间”混用，导致 TF 链难以对齐与评估脚本配对失败。
+    const double ros_stamp_s = ros::Time::now().toSec();
+
     if (map_to_odom_ready_ && map_odom_authority_) {
         const auto map_to_odom = map_odom_authority_->GetMapToOdom();
-        tf_callback_(loc::bridges::ToTransformStamped(map_to_odom, "map", "odom", timestamp_s));
+        tf_callback_(loc::bridges::ToTransformStamped(map_to_odom, "map", "odom", ros_stamp_s));
     }
-    tf_callback_(loc::bridges::ToTransformStamped(latest_motion_pose_, "odom", "base_link", timestamp_s));
+    tf_callback_(loc::bridges::ToTransformStamped(latest_motion_pose_, "odom", "base_link", ros_stamp_s));
 }
 
 void LegacyRuntimeBridge::HandleStateEstimate(const domain::result::StateEstimate&) {}

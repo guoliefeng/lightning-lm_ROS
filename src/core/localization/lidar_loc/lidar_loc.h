@@ -15,6 +15,10 @@
 
 #include "pclomp/ndt_omp_impl.hpp"
 
+namespace lightning::ui {
+class PangolinWindow;
+}
+
 namespace lightning::loc {
 
 /// 激光定位对外接口类
@@ -119,6 +123,9 @@ class LidarLoc {
 
     /// 设置init pose
     void SetInitialPose(SE3 init_pose);
+
+    /// 挂载 Pangolin UI（地图块 + 动态图层刷新）
+    void SetUi(const std::shared_ptr<lightning::ui::PangolinWindow>& ui);
 
     /// 获取定位结果
     LocalizationResult GetLocalizationResult() {
