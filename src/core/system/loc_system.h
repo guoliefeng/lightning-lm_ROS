@@ -9,6 +9,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <nav_msgs/Odometry.h>
 
 #include "livox_ros_driver/CustomMsg.h"
 
@@ -36,6 +37,7 @@ class LocSystem {
 
     /// 设置初始化位姿
     void SetInitPose(const SE3& pose);
+    bool NeedsExternalInitPose() const { return use_init_pose_topic_; }
 
     /// 处理IMU
     void ProcessIMU(const lightning::IMUPtr& imu);
@@ -43,6 +45,7 @@ class LocSystem {
     /// 处理点云
     void ProcessLidar(const sensor_msgs::PointCloud2::ConstPtr& cloud);
     void ProcessLidar(const livox_ros_driver::CustomMsg::ConstPtr& cloud);
+    void ProcessInitPose(const nav_msgs::Odometry::ConstPtr& odom);
 
     /// 实时模式下的spin
     void Spin();
@@ -62,10 +65,14 @@ class LocSystem {
     std::string imu_topic_;
     std::string cloud_topic_;
     std::string livox_topic_;
+    std::string init_pose_topic_;
+    bool use_init_pose_topic_ = false;
+    Mat3d imu_to_base_rotation_ = Mat3d::Identity();
 
     ros::Subscriber imu_sub_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber livox_sub_;
+    ros::Subscriber init_pose_sub_;
 };
 
 };  // namespace lightning

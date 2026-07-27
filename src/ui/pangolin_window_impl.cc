@@ -407,8 +407,7 @@ void PangolinWindowImpl::Render() {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    // unset the current context from the main thread
-    pangolin::GetBoundWindow()->RemoveCurrent();
+    // Destroy Pangolin resources while this thread still owns the GL context.
     pangolin::DestroyWindow(GetWindowName());
 }
 
@@ -416,7 +415,7 @@ std::string PangolinWindowImpl::GetWindowName() const { return win_name_; }
 
 void PangolinWindowImpl::AllocateBuffer() {
     std::string global_text(
-        "Welcome to SAD.UI. Open source code: https://github.com/gaoxiang12/slam_in_autonomous_driving. All right "
+        "Lightning Localization 3D Viewer\n"
         "reserved.\n"
         "Red: newest IMU pose, yellow: lidar scan pose");
     auto &font = pangolin::default_font();

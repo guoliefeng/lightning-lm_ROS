@@ -1,9 +1,14 @@
 # 针对Hainan的配置
 common:
   dataset: "hainan"
-  lidar_topic: "/lidar_odom_node/meta_cloud"
+  lidar_topic: "/lidar_preprocessor/meta_cloud"
   livox_lidar_topic: "/livox/lidar"
   imu_topic: "/ins_driver/imu"
+  init_pose_topic: "/localization/ins"
+  # IMU Y points forward. Convert IMU vectors to ROS base_link (x forward, y left, z up).
+  imu_to_base_rotation: [ 0,  1, 0,
+                         -1,  0, 0,
+                          0,  0, 1 ]
 
 # fasterlio 参数
 fasterlio:
@@ -56,7 +61,7 @@ system:
   enable_lidar_odom_skip: false
   lidar_loc_skip_num: 4
   lidar_odom_skip_num: 2
-  map_path: /home/glf/dataDisk/hainan/track3_maptest
+  map_path: /home/guoli/data/yangpu/old_Map  #\home\guoli\data\yangpu\Map
   pub_tf: true
 
 loop_closing:
@@ -81,7 +86,8 @@ lidar_loc:
   grid_search_angle_step: 60
   lidar_loc_odom_th: 0.5
   init_with_fp: true
-  min_init_confidence: 1.8
+  trust_initial_pose: true
+  min_init_confidence: 1.5
   update_dynamic_cloud: true
   update_err_h: 0.2
   update_err_v: 0.2
