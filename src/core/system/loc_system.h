@@ -21,6 +21,7 @@ namespace lightning {
 
 namespace loc {
 class Localization;
+struct LocalizationResult;
 }
 
 class LocSystem {
@@ -46,6 +47,7 @@ class LocSystem {
     void ProcessLidar(const sensor_msgs::PointCloud2::ConstPtr& cloud);
     void ProcessLidar(const livox_ros_driver::CustomMsg::ConstPtr& cloud);
     void ProcessInitPose(const nav_msgs::Odometry::ConstPtr& odom);
+    void PublishLocalizationResult(const loc::LocalizationResult& result);
 
     /// 实时模式下的spin
     void Spin();
@@ -66,6 +68,9 @@ class LocSystem {
     std::string cloud_topic_;
     std::string livox_topic_;
     std::string init_pose_topic_;
+    std::string localization_odom_topic_ = "/lightning/localization_odom";
+    std::string map_frame_id_ = "map";
+    std::string base_frame_id_ = "base_link";
     bool use_init_pose_topic_ = false;
     Mat3d imu_to_base_rotation_ = Mat3d::Identity();
 
@@ -73,8 +78,9 @@ class LocSystem {
     ros::Subscriber cloud_sub_;
     ros::Subscriber livox_sub_;
     ros::Subscriber init_pose_sub_;
+    ros::Publisher localization_odom_pub_;
 };
 
-};  // namespace lightning
+}  // namespace lightning
 
 #endif  // LIGHTNING_LOC_SYSTEM_H

@@ -68,8 +68,12 @@ bool LaserMapping::LoadParamsFromYAML(const std::string& yaml_file) {
         skip_lidar_num_ = fasterlio["skip_lidar_num"].as<int>();
         enable_skip_lidar_ = skip_lidar_num_ > 0;
 
-        options_.kf_dis_th_ = fasterlio["kf_dis_th"].as<double>();
-        options_.kf_angle_th_ = fasterlio["kf_angle_th"].as<double>() * M_PI / 180.0;
+        if (fasterlio["kf_dis_th"]) {
+            options_.kf_dis_th_ = fasterlio["kf_dis_th"].as<double>();
+        }
+        if (fasterlio["kf_angle_th"]) {
+            options_.kf_angle_th_ = fasterlio["kf_angle_th"].as<double>() * M_PI / 180.0;
+        }
 
         if (fasterlio["enable_icp_part"]) {
             options_.enable_icp_part_ = fasterlio["enable_icp_part"].as<bool>();
@@ -96,8 +100,11 @@ bool LaserMapping::LoadParamsFromYAML(const std::string& yaml_file) {
         if (yaml["roi"] && yaml["roi"]["height_max"] && yaml["roi"]["height_min"]) {
             preprocess_->SetHeightROI(yaml["roi"]["height_max"].as<float>(), yaml["roi"]["height_min"].as<float>());
         }
-    } catch (...) {
-        LOG(ERROR) << "bad conversion";
+    } catch (const YAML::Exception& error) {
+        LOG(ERROR) << "failed to load fasterlio parameters from " << yaml_file << ": " << error.what();
+        return false;
+    } catch (const std::exception& error) {
+        LOG(ERROR) << "failed to load fasterlio parameters from " << yaml_file << ": " << error.what();
         return false;
     }
 

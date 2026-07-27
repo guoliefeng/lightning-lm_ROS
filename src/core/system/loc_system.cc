@@ -16,7 +16,11 @@ LocSystem::LocSystem(LocSystem::Options options) : options_(options) {
     signal(SIGINT, lightning::debug::SigHandle);
 }
 
-LocSystem::~LocSystem() { loc_->Finish(); }
+LocSystem::~LocSystem() {
+    if (loc_) {
+        loc_->Finish();
+    }
+}
 
 bool LocSystem::Init(const std::string &yaml_path) {
     loc::Localization::Options opt;
@@ -58,6 +62,27 @@ bool LocSystem::Init(const std::string &yaml_path) {
         }
         LOG(INFO) << "IMU to base_link rotation:\n" << imu_to_base_rotation_;
     }
+    if (yaml_node["system"] && yaml_node["system"]["localization_odom_topic"]) {
+        localization_odom_topic_ = yaml_node["system"]["localization_odom_topic"].as<std::string>();
+    }
+    if (yaml_node["system"] && yaml_node["system"]["map_frame_id"]) {
+        map_frame_id_ = yaml_node["system"]["map_frame_id"].as<std::string>();
+    }
+    if (yaml_node["system"] && yaml_node["system"]["base_frame_id"]) {
+        base_frame_id_ = yaml_node["system"]["base_frame_id"].as<std::string>();
+    }
+    if (yaml_node["system"] && yaml_node["system"]["pub_tf"]) {
+        options_.pub_tf_ = yaml_node["system"]["pub_tf"].as<bool>();
+    }
+    if (localization_odom_topic_.empty() || map_frame_id_.empty() || base_frame_id_.empty()) {
+        LOG(ERROR) << "localization odometry topic and frame IDs must not be empty";
+        return false;
+    }
+    if (map_frame_id_.front() == '/' || base_frame_id_.front() == '/') {
+        LOG(ERROR) << "TF frame IDs must not start with '/': map_frame_id=" << map_frame_id_
+                   << ", base_frame_id=" << base_frame_id_;
+        return false;
+    }
 
     imu_sub_ = node_->subscribe<sensor_msgs::Imu>(
         imu_topic_, 10, [this](const sensor_msgs::Imu::ConstPtr& msg) {
@@ -89,10 +114,18 @@ bool LocSystem::Init(const std::string &yaml_path) {
         LOG(INFO) << "waiting init pose from " << init_pose_topic_;
     }
 
+    localization_odom_pub_ = node_->advertise<nav_msgs::Odometry>(localization_odom_topic_, 10);
+    loc_->SetResultCallback(
+        [this](const loc::LocalizationResult& result) { PublishLocalizationResult(result); });
+    LOG(INFO) << "publishing localization odometry on " << localization_odom_topic_;
+
     if (options_.pub_tf_) {
         tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>();
-        loc_->SetTFCallback(
-            [this](const geometry_msgs::TransformStamped &pose) { tf_broadcaster_->sendTransform(pose); });
+        loc_->SetTFCallback([this](geometry_msgs::TransformStamped pose) {
+            pose.header.frame_id = map_frame_id_;
+            pose.child_frame_id = base_frame_id_;
+            tf_broadcaster_->sendTransform(pose);
+        });
     }
 
     bool ret = loc_->Init(yaml_path, map_path);
@@ -127,6 +160,13 @@ void LocSystem::ProcessInitPose(const nav_msgs::Odometry::ConstPtr &odom) {
     quat.normalize();
     SetInitPose(SE3(quat, Vec3d(p.x, p.y, p.z)));
     init_pose_sub_.shutdown();
+}
+
+void LocSystem::PublishLocalizationResult(const loc::LocalizationResult& result) {
+    nav_msgs::Odometry odom = result.ToOdomMsg();
+    odom.header.frame_id = map_frame_id_;
+    odom.child_frame_id = base_frame_id_;
+    localization_odom_pub_.publish(odom);
 }
 
 void LocSystem::ProcessIMU(const IMUPtr &imu) {

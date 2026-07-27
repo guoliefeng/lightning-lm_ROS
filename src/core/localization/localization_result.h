@@ -4,6 +4,8 @@
 #pragma once
 
 #include <geometry_msgs/TransformStamped.h>
+#include <nav_msgs/Odometry.h>
+
 #include "common/eigen_types.h"
 #include "common/nav_state.h"
 
@@ -53,7 +55,8 @@ struct LocalizationResult {
     double is_parking_ = false;
 
     geometry_msgs::TransformStamped ToGeoMsg() const;  // 转到geometry msg
-    NavState ToNavState() const;                            // 转到navstate
+    nav_msgs::Odometry ToOdomMsg() const;              // 转到ROS Odometry消息
+    NavState ToNavState() const;                        // 转到navstate
 };
 
 }  // namespace lightning::loc

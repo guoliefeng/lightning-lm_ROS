@@ -71,10 +71,12 @@ bool LidarLoc::Init(const std::string& config_path) {
     options_.init_with_fp_ = yaml.GetValue<bool>("lidar_loc", "init_with_fp");
     options_.enable_parking_static_ = yaml.GetValue<bool>("lidar_loc", "enable_parking_static");
     options_.enable_icp_adjust_ = yaml.GetValue<bool>("lidar_loc", "enable_icp_adjust");
-    options_.with_height_ = yaml.GetValue<bool>("loop_closing", "with_height");
     options_.try_self_extrap_ = yaml.GetValue<bool>("lidar_loc", "try_self_extrap");
 
     YAML::Node yaml_node = YAML::LoadFile(config_path);
+    if (yaml_node["loop_closing"] && yaml_node["loop_closing"]["with_height"]) {
+        options_.with_height_ = yaml_node["loop_closing"]["with_height"].as<bool>();
+    }
     if (yaml_node["lidar_loc"] && yaml_node["lidar_loc"]["trust_initial_pose"]) {
         options_.trust_initial_pose_ = yaml_node["lidar_loc"]["trust_initial_pose"].as<bool>();
     }

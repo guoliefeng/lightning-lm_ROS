@@ -27,6 +27,7 @@ int main(int argc, char** argv) {
 
     if (!loc.Init(FLAGS_config)) {
         LOG(ERROR) << "failed to init loc";
+        return 1;
     }
 
     /// 默认起点开始定位；如果配置了init_pose_topic，则等待外部首帧位姿

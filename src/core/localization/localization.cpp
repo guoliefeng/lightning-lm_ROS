@@ -79,7 +79,7 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
         lidar_loc_proc_cloud_.Start();
     }
 
-    /// TODO: 发布
+    /// 将有效的高频定位结果交给ROS输出层
     pgo_->SetHighFrequencyGlobalOutputHandleFunction([this](const LocalizationResult& res) {
         // if (loc_result_.timestamp_ > 0) {
         //     double loc_fps = 1.0 / (res.timestamp_ - loc_result_.timestamp_);
@@ -88,8 +88,13 @@ bool Localization::Init(const std::string& yaml_path, const std::string& global_
 
         loc_result_ = res;
 
-        if (tf_callback_ && loc_result_.valid_) {
-            tf_callback_(loc_result_.ToGeoMsg());
+        if (loc_result_.valid_) {
+            if (tf_callback_) {
+                tf_callback_(loc_result_.ToGeoMsg());
+            }
+            if (result_callback_) {
+                result_callback_(loc_result_);
+            }
         }
 
         if (ui_) {
@@ -319,7 +324,9 @@ void Localization::ProcessIMUMsg(IMUPtr imu) {
 // }
 
 void Localization::Finish() {
-    lidar_loc_->Finish();
+    if (lidar_loc_) {
+        lidar_loc_->Finish();
+    }
     if (ui_) {
         ui_->Quit();
     }
@@ -337,5 +344,9 @@ void Localization::SetExternalPose(const Eigen::Quaterniond& q, const Eigen::Vec
 }
 
 void Localization::SetTFCallback(Localization::TFCallback&& callback) { tf_callback_ = callback; }
+
+void Localization::SetResultCallback(Localization::ResultCallback&& callback) {
+    result_callback_ = std::move(callback);
+}
 
 }  // namespace lightning::loc

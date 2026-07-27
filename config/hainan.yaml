@@ -39,6 +39,8 @@ fasterlio:
                  0, 1, 0,
                  0, 0, 1 ]
   keep_first_imu_estimation: false
+  kf_dis_th: 2.0              # 平移超过该距离（米）时创建关键帧
+  kf_angle_th: 15.0           # 旋转超过该角度（度）时创建关键帧
 
 
 g2p5:
@@ -63,6 +65,9 @@ system:
   lidar_odom_skip_num: 2
   map_path: /home/guoli/data/yangpu/old_Map  #\home\guoli\data\yangpu\Map
   pub_tf: true
+  localization_odom_topic: "/lightning/localization_odom"
+  map_frame_id: "map"
+  base_frame_id: "base_link"
 
 loop_closing:
   loop_kf_gap: 20       # 每隔多少个关键帧检查一次
@@ -70,6 +75,7 @@ loop_closing:
   closest_id_th: 50     # 历史关键帧与当前帧的ID间隔
   max_range: 30.0       # 候选帧的最大距离
   ndt_score_th: 1.0     # ndt位姿分值
+  with_height: true     # 定位匹配保留高度约束
 
 
 ### localization ================================================================================================
