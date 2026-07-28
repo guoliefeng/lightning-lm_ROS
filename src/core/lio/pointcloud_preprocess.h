@@ -12,7 +12,7 @@
 
 namespace lightning {
 
-enum class LidarType { AVIA = 1, VELO32 = 2, OUST64 = 3, ROBOSENSE = 4, MERGED = 6 };
+enum class LidarType { AVIA = 1, VELO32, OUST64, MERGED = 6 };
 
 /**
  * point cloud preprocess
@@ -42,14 +42,9 @@ class PointCloudPreprocess {
     float &TimeScale() { return time_scale_; }
     LidarType GetLidarType() const { return lidar_type_; }
     void SetLidarType(LidarType lt) { lidar_type_ = lt; }
-    void SetHeightROI(float height_max, float height_min) {
-        height_max_ = height_max;
-        height_min_ = height_min;
-    }
 
    private:
     void Oust64Handler(const sensor_msgs::PointCloud2 ::ConstPtr &msg);
-    void RoboSenseHandler(const sensor_msgs::PointCloud2 ::ConstPtr &msg);
     void VelodyneHandler(const sensor_msgs::PointCloud2 ::ConstPtr &msg);
     void MergedCloudHandler(const sensor_msgs::PointCloud2 ::ConstPtr &msg);
 
@@ -62,8 +57,6 @@ class PointCloudPreprocess {
     float time_scale_ = 1e-3;
     float merged_scan_period_ms_ = 100.0f;  // merged cloud default scan period is 0.1s
     bool given_offset_time_ = false;
-    float height_max_ = 1.0f;
-    float height_min_ = -1.0f;
 };
 }  // namespace lightning
 

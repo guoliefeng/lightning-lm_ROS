@@ -1,5 +1,4 @@
 #include "pgo_impl.h"
-#include "core/lightning_math.hpp"
 #include "core/opti_algo/algo_select.h"
 #include "core/robust_kernel/robust_kernel_all.h"
 
